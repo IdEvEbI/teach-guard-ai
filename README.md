@@ -15,22 +15,20 @@
 2. **单视频升级**：可导入 XMind 的结构 Markdown、讲义 Markdown、基于讲义的全屏类 PPT 幻灯片。
 3. **目录批量**：时长、课型、言行底线扫描、时长与结构完整性，并生成全天扫描报告。
 
-当前里程碑是 **M0（仓基建与文档冻结）**，尚未实现转写流水线。产品范围见后续 PR 合入的 `docs/01-product/`。
+当前里程碑是 **M0（仓基建与文档冻结）**，尚未实现转写流水线。产品范围以 [产品 PRD](./docs/01-product/001_prd_教学守护助手产品说明.md) 为准。
 
-当前**不做**：全员自查门户、绩效考核联动、自动判断视频是否同属一天、云端 ASR。
+当前**不做**：全员自查门户、绩效考核联动、自动判断视频是否同属一天、云端 ASR、本阶段打课研百分制分数。
 
 ---
 
 ## 2. 新会话请先读
 
-文档将随 M0 后续 Issue 补齐。在文档落地前，以本 README 与 GitHub Milestone「M0 仓基建与文档冻结」为准。
+1. [产品 PRD](./docs/01-product/001_prd_教学守护助手产品说明.md)（范围、用户、验收）
+2. [上游标准引用](./docs/02-architecture/003_upstream-standards_上游标准引用.md)
+3. 文档总入口：[docs/README.md](./docs/README.md)
+4. Issue 看板与 DevOps、本仓 Cursor Rule：后续 Issue 合入
 
-计划阅读顺序：
-
-1. 产品 PRD（范围、用户、验收）
-2. 上游标准引用
-3. Issue 看板与 DevOps 工作流
-4. 本仓 Cursor Rule：`.cursor/rules/teach-guard-ai.mdc`（后续 Issue 添加）
+CLI 产品命令（实现后）：`teach-guard inspect <文件>` 精查单个视频；`teach-guard scan <目录>` 扫描授课日目录。
 
 **默认技术栈**：Python 3.12 CLI（uv）· 本地 mlx-whisper · DeepSeek API · Markdown 工具链（Prettier + prettier-plugin-zh + markdownlint）
 
@@ -58,7 +56,7 @@ uv run teach-guard --help
 uv run teach-guard check
 ```
 
-流水线命令（单视频检查、目录批量）将在后续里程碑加入，本 Issue 只保证入口能启动。
+当前已提供 `--help` 与 `check`。`inspect` 与 `scan` 将在后续里程碑按 PRD 实现。
 
 ---
 
