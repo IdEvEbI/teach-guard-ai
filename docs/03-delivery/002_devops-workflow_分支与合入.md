@@ -87,7 +87,7 @@
 2. [产品 PRD](../01-product/001_prd_教学守护助手产品说明.md)
 3. [上游标准引用](../02-architecture/001_upstream-standards_上游标准引用.md)（改评价维度时打开上游原文）
 4. 本文
-5. 本仓 Cursor Rule（#4 合入后）
+5. 本仓 Cursor Rule：`.cursor/rules/teach-guard-ai.mdc`
 
 ---
 
