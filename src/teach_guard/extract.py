@@ -38,6 +38,14 @@ def classify_media(path: Path) -> str:
     return "unknown"
 
 
+def existing_audio_path(run_dir: Path, stem: str) -> Path | None:
+    for suffix in (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus"):
+        candidate = run_dir / f"{stem}{suffix}"
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return candidate
+    return None
+
+
 def extract_audio(source: Path, run_dir: Path) -> ExtractResult:
     if classify_media(source) == "audio":
         dest = run_dir / f"{source.stem}{source.suffix.lower()}"
