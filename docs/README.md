@@ -27,4 +27,4 @@ MVP 与分期范围以 [001 PRD](./01-product/001_prd_教学守护助手产品�
 3. [上游标准引用](./02-architecture/001_upstream-standards_上游标准引用.md)：确认评价尺子从哪里来。
 4. [分支与合入](./03-delivery/002_devops-workflow_分支与合入.md)：GitHub Flow、一 Issue 一 PR。
 5. 根目录 [README.md](../README.md)：如何安装工具链与运行 `teach-guard check`。
-6. 本仓 Cursor Rule（#4 合入后）。
+6. 本仓 Cursor Rule：[`.cursor/rules/teach-guard-ai.mdc`](../.cursor/rules/teach-guard-ai.mdc)。新会话 Skill：`.cursor/skills/teach-guard-new-session/`。
