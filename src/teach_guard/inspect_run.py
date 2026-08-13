@@ -110,3 +110,12 @@ def set_artifact(run_dir: Path, name: str, path: Path) -> None:
     data = load_manifest(run_dir)
     data.setdefault("artifacts", {})[name] = str(path.resolve())
     save_manifest(run_dir, data)
+
+
+def update_asr(run_dir: Path, *, status: str, repo: str | None = None) -> None:
+    data = load_manifest(run_dir)
+    asr = data.setdefault("models", {}).setdefault("asr", {})
+    asr["status"] = status
+    if repo:
+        asr["repo"] = repo
+    save_manifest(run_dir, data)

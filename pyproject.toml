@@ -22,16 +22,23 @@ packages = ["src/teach_guard"]
 [tool.uv]
 package = true
 
-[dependency-groups]
-dev = [
-    "pytest>=8.0",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "no_stub_transcribe: 不 stub transcribe_audio，用于测试转写失败路径",
+]
 
 [tool.basedpyright]
 venvPath = "."
 venv = ".venv"
 extraPaths = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+asr = [
+    "mlx-whisper>=0.4.0",
+    "httpx[socks]>=0.28.0",
+]

@@ -84,3 +84,4 @@ def test_inspect_extracts_tiny_video(tmp_path: Path) -> None:
     assert data["steps"][0]["status"] == "done"
     assert data["artifacts"]["audio"].endswith("tiny.mp3")
     assert "已抽出音轨" in result.stdout
+    assert (run_dir / "tiny.raw.md").is_file()
