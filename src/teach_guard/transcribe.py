@@ -70,7 +70,7 @@ def render_raw_markdown(
         "- 引擎：mlx-whisper",
         f"- 模型：`{model}`",
         f"- 语言：{language}",
-        "- 本文件保持识别原词，不在本步改写数字、型号或专名。标点与纠错是后续步骤。",
+        "- 本文件保持识别原词，不在本步改写数字、型号或专名。标点是后续步骤。",
         "",
         "## 片段",
         "",
@@ -87,6 +87,19 @@ def render_raw_markdown(
         lines.append(f"[{start} – {end}] {text}")
         lines.append("")
     return "\n".join(lines)
+
+
+def load_transcript_if_present(run_dir: Path, stem: str) -> TranscribeResult | None:
+    json_path = run_dir / f"{stem}.raw.json"
+    markdown_path = run_dir / f"{stem}.raw.md"
+    if not json_path.is_file() or not markdown_path.is_file():
+        return None
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    model = str(payload.get("model") or "unknown")
+    return TranscribeResult(markdown_path=markdown_path, json_path=json_path, model=model)
 
 
 def transcribe_audio(audio_path: Path, run_dir: Path, stem: str) -> TranscribeResult:

@@ -5,6 +5,7 @@ description = "Teaching Guard AI assistant: inspect lesson videos and generate r
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "openai>=1.40.0",
     "python-dotenv>=1.0.0",
     "typer>=0.16.0",
 ]
@@ -27,6 +28,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "no_stub_transcribe: 不 stub transcribe_audio，用于测试转写失败路径",
+    "no_stub_punctuate: 不 stub punctuate_transcript，用于测试标点失败路径",
 ]
 
 [tool.basedpyright]
