@@ -10,7 +10,7 @@ on:
       - "package-lock.json"
       - ".github/**"
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - "**.md"
       - ".prettierrc"

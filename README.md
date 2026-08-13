@@ -24,9 +24,10 @@
 ## 2. 新会话请先读
 
 1. [产品 PRD](./docs/01-product/001_prd_教学守护助手产品说明.md)（范围、用户、验收）
-2. [上游标准引用](./docs/02-architecture/003_upstream-standards_上游标准引用.md)
+2. [上游标准引用](./docs/02-architecture/001_upstream-standards_上游标准引用.md)
 3. 文档总入口：[docs/README.md](./docs/README.md)
-4. Issue 看板与 DevOps、本仓 Cursor Rule：后续 Issue 合入
+4. [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) 与 [分支与合入](./docs/03-delivery/002_devops-workflow_分支与合入.md)
+5. 本仓 Cursor Rule：后续 Issue 合入
 
 CLI 产品命令（实现后）：`teach-guard inspect <文件>` 精查单个视频；`teach-guard scan <目录>` 扫描授课日目录。
 
