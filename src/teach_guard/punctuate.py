@@ -198,6 +198,23 @@ def _punctuate_batch(
     return result
 
 
+def load_punctuate_if_present(run_dir: Path, stem: str) -> PunctuateResult | None:
+    json_path = run_dir / f"{stem}.punct.json"
+    markdown_path = run_dir / f"{stem}.punct.md"
+    if not json_path.is_file() or not markdown_path.is_file():
+        return None
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return PunctuateResult(
+        markdown_path=markdown_path,
+        json_path=json_path,
+        prompt_version=str(payload.get("prompt_version") or "unknown"),
+        model=str(payload.get("model") or "unknown"),
+    )
+
+
 def punctuate_transcript(
     raw_json_path: Path,
     run_dir: Path,

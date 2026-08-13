@@ -11,7 +11,7 @@
 
 ## 1. 目标（分期）
 
-1. **单视频核心**：抽音轨 → 转写 → 标点与结构 → 识别六课型 → 概念与示例检查 → 讲解结构 → 提升建议（分数评定后置）。
+1. **单视频核心**：抽音轨 → 转写 → 标点与结构 → 识别课型 → 概念与示例检查 → 讲解结构 → 提升建议（分数评定后置）。
 2. **单视频升级**：可导入 XMind 的结构 Markdown、讲义 Markdown、基于讲义的全屏类 PPT 幻灯片。
 3. **目录批量**：时长、课型、言行底线扫描、时长与结构完整性，并生成全天扫描报告。
 
@@ -29,7 +29,7 @@
 4. [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) 与 [分支与合入](./docs/03-delivery/002_devops-workflow_分支与合入.md)
 5. 本仓 Cursor Rule：[`.cursor/rules/teach-guard-ai.mdc`](./.cursor/rules/teach-guard-ai.mdc)
 
-CLI 产品命令：`teach-guard inspect <文件>` 精查单个视频（当前做到标点逐字稿）；`teach-guard scan <目录>` 扫描授课日目录（尚未实现）。
+CLI 产品命令：`teach-guard inspect <文件>` 精查单个视频（当前做到课型判定）；`teach-guard scan <目录>` 扫描授课日目录（尚未实现）。
 
 **默认技术栈**：Python 3.12 CLI（uv）· 本地 mlx-whisper · DeepSeek API · Markdown 工具链（Prettier + prettier-plugin-zh + markdownlint）
 
@@ -60,7 +60,7 @@ uv run teach-guard inspect --help
 uv run teach-guard inspect <视频或音频文件>
 ```
 
-课例默认放在 `data/input/`。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录，写入 `manifest.json`、同名音频、未补标点的 `{stem}.raw.md` / `{stem}.raw.json`，以及只补标点、不改词的 `{stem}.punct.md` / `{stem}.punct.json`。已有音轨或原始逐字稿时会跳过抽轨与转写。课型与建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
+课例默认放在 `data/input/`。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录，写入 `manifest.json`、同名音频、未补标点的 `{stem}.raw.md` / `{stem}.raw.json`、只补标点的 `{stem}.punct.md` / `{stem}.punct.json`，以及课型判定 `{stem}.type.md` / `{stem}.type.json`。已有音轨、原始逐字稿或标点稿时会跳过对应步骤。可用 `--type` 覆盖课型。建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 
 ---
 

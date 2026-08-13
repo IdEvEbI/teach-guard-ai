@@ -28,9 +28,20 @@ from teach_guard.inspect_run import (
     update_asr,
     update_llm,
 )
+from teach_guard.lesson_type import (
+    EXIT_LESSON_TYPE_FAILED,
+    LessonTypeError,
+    classify_lesson_type,
+    parse_cli_lesson_type,
+)
 from teach_guard.llm import EXIT_LLM_CONFIG, LlmConfigError, llm_api_key
 from teach_guard.paths import DEFAULT_INPUT_DIR, DEFAULT_OUTPUT_DIR, get_output_dir, resolve_input_file
-from teach_guard.punctuate import EXIT_PUNCTUATE_FAILED, PunctuateError, punctuate_transcript
+from teach_guard.punctuate import (
+    EXIT_PUNCTUATE_FAILED,
+    PunctuateError,
+    load_punctuate_if_present,
+    punctuate_transcript,
+)
 from teach_guard.transcribe import (
     EXIT_ASR_MISSING,
     EXIT_TRANSCRIBE_FAILED,
@@ -97,8 +108,26 @@ def inspect(
             help=f"产物根目录，默认 {DEFAULT_OUTPUT_DIR}/。",
         ),
     ] = None,
+    lesson_type: Annotated[
+        str | None,
+        typer.Option(
+            "--type",
+            help=(
+                "覆盖课型。取值：intro / practice / syntax / case / principle / "
+                "project / stage_first / other。"
+            ),
+        ),
+    ] = None,
 ) -> None:
-    """为单个视频抽轨、转写原始逐字稿，并补标点（不改词）。课型与建议尚未实现。"""
+    """为单个视频抽轨、转写、补标点，并识别课型。建议报告尚未实现。"""
+    override: str | None = None
+    if lesson_type:
+        try:
+            override = parse_cli_lesson_type(lesson_type)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=1) from exc
+
     try:
         resolved = resolve_input_file(source)
     except FileNotFoundError as exc:
@@ -168,34 +197,73 @@ def inspect(
         update_asr(run_dir, status="done", repo=transcript.model)
         typer.echo(f"已写出原始逐字稿：{transcript.markdown_path}")
 
-    typer.echo("正在补标点（不改词）…")
+    existing_punct = load_punctuate_if_present(run_dir, stem) if prep.reused else None
+    if existing_punct is not None:
+        punctuated = existing_punct
+        set_artifact(run_dir, "transcript_punct_md", punctuated.markdown_path)
+        set_artifact(run_dir, "transcript_punct_json", punctuated.json_path)
+        set_prompt_version(run_dir, "punctuate", punctuated.prompt_version)
+        mark_step(run_dir, "punctuate", "skipped")
+        update_llm(
+            run_dir,
+            status="done",
+            provider=os.environ.get("LLM_PROVIDER", "deepseek").strip() or "deepseek",
+            model=punctuated.model,
+        )
+        typer.echo(f"已有标点逐字稿，跳过标点：{punctuated.markdown_path}")
+    else:
+        typer.echo("正在补标点（不改词）…")
+        try:
+            punctuated = punctuate_transcript(
+                transcript.json_path,
+                run_dir,
+                stem,
+                on_batch=lambda index, total: typer.echo(f"标点批次 {index}/{total}…"),
+            )
+        except LlmConfigError as exc:
+            mark_step(run_dir, "punctuate", "failed", error=str(exc))
+            update_llm(run_dir, status="failed")
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=EXIT_LLM_CONFIG) from exc
+        except PunctuateError as exc:
+            mark_step(run_dir, "punctuate", "failed", error=str(exc))
+            update_llm(run_dir, status="failed")
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=EXIT_PUNCTUATE_FAILED) from exc
+
+        set_artifact(run_dir, "transcript_punct_md", punctuated.markdown_path)
+        set_artifact(run_dir, "transcript_punct_json", punctuated.json_path)
+        set_prompt_version(run_dir, "punctuate", punctuated.prompt_version)
+        mark_step(run_dir, "punctuate", "done")
+        update_llm(
+            run_dir,
+            status="done",
+            provider=os.environ.get("LLM_PROVIDER", "deepseek").strip() or "deepseek",
+            model=punctuated.model,
+        )
+        typer.echo(f"已写出标点逐字稿：{punctuated.markdown_path}")
+
+    typer.echo("正在识别课型…" if override is None else f"使用命令行覆盖课型：{override}")
     try:
-        punctuated = punctuate_transcript(
-            transcript.json_path,
+        typed = classify_lesson_type(
+            punctuated.json_path,
             run_dir,
             stem,
-            on_batch=lambda index, total: typer.echo(f"标点批次 {index}/{total}…"),
+            source_name=resolved.name,
+            override=override,
         )
     except LlmConfigError as exc:
-        mark_step(run_dir, "punctuate", "failed", error=str(exc))
-        update_llm(run_dir, status="failed")
+        mark_step(run_dir, "lesson_type", "failed", error=str(exc))
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=EXIT_LLM_CONFIG) from exc
-    except PunctuateError as exc:
-        mark_step(run_dir, "punctuate", "failed", error=str(exc))
-        update_llm(run_dir, status="failed")
+    except LessonTypeError as exc:
+        mark_step(run_dir, "lesson_type", "failed", error=str(exc))
         typer.echo(str(exc), err=True)
-        raise typer.Exit(code=EXIT_PUNCTUATE_FAILED) from exc
+        raise typer.Exit(code=EXIT_LESSON_TYPE_FAILED) from exc
 
-    set_artifact(run_dir, "transcript_punct_md", punctuated.markdown_path)
-    set_artifact(run_dir, "transcript_punct_json", punctuated.json_path)
-    set_prompt_version(run_dir, "punctuate", punctuated.prompt_version)
-    mark_step(run_dir, "punctuate", "done")
-    update_llm(
-        run_dir,
-        status="done",
-        provider=os.environ.get("LLM_PROVIDER", "deepseek").strip() or "deepseek",
-        model=punctuated.model,
-    )
-    typer.echo(f"已写出标点逐字稿：{punctuated.markdown_path}")
-    typer.echo("后续步骤（课型、建议）尚未实现。")
+    set_artifact(run_dir, "lesson_type_md", typed.markdown_path)
+    set_artifact(run_dir, "lesson_type_json", typed.json_path)
+    set_prompt_version(run_dir, "pedagogy_type", typed.prompt_version)
+    mark_step(run_dir, "lesson_type", "done")
+    typer.echo(f"已写出课型判定：{typed.markdown_path}（`{typed.lesson_type}`）")
+    typer.echo("后续步骤（建议报告）尚未实现。")
