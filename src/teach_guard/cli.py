@@ -10,7 +10,14 @@ from typing import Annotated
 import typer
 
 from teach_guard import __version__
-from teach_guard.inspect_run import prepare_inspect_run
+from teach_guard.extract import (
+    EXIT_EXTRACT_FAILED,
+    EXIT_FFMPEG_MISSING,
+    ExtractError,
+    FfmpegMissingError,
+    extract_audio,
+)
+from teach_guard.inspect_run import mark_step, prepare_inspect_run, set_artifact
 from teach_guard.paths import DEFAULT_INPUT_DIR, DEFAULT_OUTPUT_DIR, get_output_dir, resolve_input_file
 
 app = typer.Typer(
@@ -57,7 +64,7 @@ def inspect(
         ),
     ] = None,
 ) -> None:
-    """为单个视频建立运行目录与清单骨架。抽轨与转写尚未实现。"""
+    """为单个视频抽音轨并写入运行清单。转写与建议尚未实现。"""
     try:
         resolved = resolve_input_file(source)
     except FileNotFoundError as exc:
@@ -67,4 +74,23 @@ def inspect(
     run_dir = prepare_inspect_run(resolved, output_root or get_output_dir())
     typer.echo(f"已创建运行目录：{run_dir}")
     typer.echo(f"运行清单：{run_dir / 'manifest.json'}")
-    typer.echo("后续步骤（抽轨、转写、建议）尚未实现。")
+    typer.echo("正在抽轨…")
+
+    try:
+        extracted = extract_audio(resolved, run_dir)
+    except FfmpegMissingError as exc:
+        mark_step(run_dir, "extract_audio", "failed", error=str(exc))
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=EXIT_FFMPEG_MISSING) from exc
+    except ExtractError as exc:
+        mark_step(run_dir, "extract_audio", "failed", error=str(exc))
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=EXIT_EXTRACT_FAILED) from exc
+
+    set_artifact(run_dir, "audio", extracted.audio_path)
+    mark_step(run_dir, "extract_audio", "skipped" if extracted.skipped else "done")
+    if extracted.skipped:
+        typer.echo(f"输入已是音频，已跳过抽轨：{extracted.audio_path}")
+    else:
+        typer.echo(f"已抽出音轨：{extracted.audio_path}")
+    typer.echo("后续步骤（转写、建议）尚未实现。")

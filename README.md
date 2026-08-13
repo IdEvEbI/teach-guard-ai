@@ -29,7 +29,7 @@
 4. [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) 与 [分支与合入](./docs/03-delivery/002_devops-workflow_分支与合入.md)
 5. 本仓 Cursor Rule：[`.cursor/rules/teach-guard-ai.mdc`](./.cursor/rules/teach-guard-ai.mdc)
 
-CLI 产品命令：`teach-guard inspect <文件>` 精查单个视频（当前先写出运行目录与清单骨架）；`teach-guard scan <目录>` 扫描授课日目录（尚未实现）。
+CLI 产品命令：`teach-guard inspect <文件>` 精查单个视频（当前做到抽轨）；`teach-guard scan <目录>` 扫描授课日目录（尚未实现）。
 
 **默认技术栈**：Python 3.12 CLI（uv）· 本地 mlx-whisper · DeepSeek API · Markdown 工具链（Prettier + prettier-plugin-zh + markdownlint）
 
@@ -59,7 +59,7 @@ uv run teach-guard inspect --help
 uv run teach-guard inspect <视频或音频文件>
 ```
 
-课例默认放在 `data/input/`（相对路径会先看当前目录，再看这里）。`inspect` 目前会在 `data/output/`（可用 `--output` 覆盖）下建立本次运行目录，并写入 `manifest.json` 骨架（输入哈希、ASR / LLM 占位、后续步骤 `pending`）。这两个目录都不入库。抽轨、转写与建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。
+课例默认放在 `data/input/`（相对路径会先看当前目录，再看这里）。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录（例如 `data/input/01_课/day01/大纲.avi` → `data/output/01_课/day01/大纲/`），写入 `manifest.json` 和同名 `mp3`。这两个目录都不入库。转写与建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。
 
 ---
 

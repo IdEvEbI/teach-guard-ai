@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from teach_guard import __version__
+from teach_guard.paths import get_input_dir, output_run_dir
 
 SCHEMA_VERSION = 1
-HASH_PREFIX_LEN = 12
 ASR_ENGINE = "mlx-whisper"
 ASR_SIZE = "large-v3-turbo"
 LLM_PROVIDER = "deepseek"
@@ -32,12 +31,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def safe_stem(path: Path) -> str:
-    stem = path.stem.strip() or "input"
-    cleaned = re.sub(r"[^\w.\-]+", "_", stem, flags=re.UNICODE).strip("._")
-    return (cleaned[:80] or "input")
 
 
 def build_manifest(*, source: Path, digest: str) -> dict[str, Any]:
@@ -70,15 +63,50 @@ def build_manifest(*, source: Path, digest: str) -> dict[str, Any]:
     }
 
 
-def prepare_inspect_run(source: Path, output_root: Path) -> Path:
+def prepare_inspect_run(source: Path, output_root: Path, input_root: Path | None = None) -> Path:
     """创建本次 inspect 目录并写入 manifest.json，返回运行目录。"""
     digest = sha256_file(source)
-    run_dir = output_root / f"{safe_stem(source)}-{digest[:HASH_PREFIX_LEN]}"
+    run_dir = output_run_dir(source, output_root, input_root or get_input_dir())
     run_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = run_dir / "manifest.json"
-    manifest_path.write_text(
+    dest = run_dir / "manifest.json"
+    dest.write_text(
         json.dumps(build_manifest(source=source, digest=digest), ensure_ascii=False, indent=2)
         + "\n",
         encoding="utf-8",
     )
     return run_dir
+
+
+def manifest_path(run_dir: Path) -> Path:
+    return run_dir / "manifest.json"
+
+
+def load_manifest(run_dir: Path) -> dict[str, Any]:
+    return json.loads(manifest_path(run_dir).read_text(encoding="utf-8"))
+
+
+def save_manifest(run_dir: Path, data: dict[str, Any]) -> None:
+    manifest_path(run_dir).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def mark_step(run_dir: Path, step_id: str, status: str, *, error: str | None = None) -> None:
+    data = load_manifest(run_dir)
+    for step in data["steps"]:
+        if step["id"] == step_id:
+            step["status"] = status
+            if error:
+                step["error"] = error
+            else:
+                step.pop("error", None)
+            save_manifest(run_dir, data)
+            return
+    raise KeyError(f"运行清单中没有步骤 {step_id}")
+
+
+def set_artifact(run_dir: Path, name: str, path: Path) -> None:
+    data = load_manifest(run_dir)
+    data.setdefault("artifacts", {})[name] = str(path.resolve())
+    save_manifest(run_dir, data)

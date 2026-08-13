@@ -33,3 +33,14 @@ def resolve_input_file(source: Path, input_root: Path | None = None) -> Path:
 
     detail = "；".join(str(path) for path in tried)
     raise FileNotFoundError(f"找不到输入文件（已尝试：{detail}）")
+
+
+def output_run_dir(source: Path, output_root: Path, input_root: Path | None = None) -> Path:
+    """镜像输入相对路径：data/input/a/b/c.avi → data/output/a/b/c/ 。"""
+    resolved = source.resolve()
+    root = (input_root or get_input_dir()).resolve()
+    try:
+        relative_parent = resolved.parent.relative_to(root)
+    except ValueError:
+        return output_root / resolved.stem
+    return output_root / relative_parent / resolved.stem
