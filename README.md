@@ -15,7 +15,7 @@
 2. **单视频升级**：可导入 XMind 的结构 Markdown、讲义 Markdown、基于讲义的全屏类 PPT 幻灯片。
 3. **目录批量**：时长、课型、言行底线扫描、时长与结构完整性，并生成全天扫描报告。
 
-当前里程碑是 **M0（仓基建与文档冻结）**，尚未实现转写流水线。产品范围以 [产品 PRD](./docs/01-product/001_prd_教学守护助手产品说明.md) 为准。
+当前里程碑是 **M1（单视频 `inspect`）**。产品范围以 [产品 PRD](./docs/01-product/001_prd_教学守护助手产品说明.md) 为准。
 
 当前**不做**：全员自查门户、绩效考核联动、自动判断视频是否同属一天、云端 ASR、本阶段打课研百分制分数。
 
@@ -29,7 +29,7 @@
 4. [开发看板](./docs/03-delivery/001_dev-board_开发看板.md) 与 [分支与合入](./docs/03-delivery/002_devops-workflow_分支与合入.md)
 5. 本仓 Cursor Rule：[`.cursor/rules/teach-guard-ai.mdc`](./.cursor/rules/teach-guard-ai.mdc)
 
-CLI 产品命令（实现后）：`teach-guard inspect <文件>` 精查单个视频；`teach-guard scan <目录>` 扫描授课日目录。
+CLI 产品命令：`teach-guard inspect <文件>` 精查单个视频（当前先写出运行目录与清单骨架）；`teach-guard scan <目录>` 扫描授课日目录（尚未实现）。
 
 **默认技术栈**：Python 3.12 CLI（uv）· 本地 mlx-whisper · DeepSeek API · Markdown 工具链（Prettier + prettier-plugin-zh + markdownlint）
 
@@ -49,15 +49,17 @@ npm run lint:md     # Markdownlint 检查
 
 ---
 
-## 4. Python CLI（最小入口）
+## 4. Python CLI
 
 ```bash
 uv sync
 uv run teach-guard --help
 uv run teach-guard check
+uv run teach-guard inspect --help
+uv run teach-guard inspect <视频或音频文件>
 ```
 
-当前已提供 `--help` 与 `check`。`inspect` 与 `scan` 将在后续里程碑按 PRD 实现。
+课例默认放在 `data/input/`（相对路径会先看当前目录，再看这里）。`inspect` 目前会在 `data/output/`（可用 `--output` 覆盖）下建立本次运行目录，并写入 `manifest.json` 骨架（输入哈希、ASR / LLM 占位、后续步骤 `pending`）。这两个目录都不入库。抽轨、转写与建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。
 
 ---
 
