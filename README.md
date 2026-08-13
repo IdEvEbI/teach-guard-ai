@@ -59,7 +59,7 @@ uv run teach-guard inspect --help
 uv run teach-guard inspect <视频或音频文件>
 ```
 
-`inspect` 目前会在 `output/`（可用 `--output` 覆盖）下建立本次运行目录，并写入 `manifest.json` 骨架（输入哈希、ASR / LLM 占位、后续步骤 `pending`）。抽轨、转写与建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。
+课例默认放在 `data/input/`（相对路径会先看当前目录，再看这里）。`inspect` 目前会在 `data/output/`（可用 `--output` 覆盖）下建立本次运行目录，并写入 `manifest.json` 骨架（输入哈希、ASR / LLM 占位、后续步骤 `pending`）。这两个目录都不入库。抽轨、转写与建议报告按开发看板后续 Issue 补上。`scan` 尚未实现。
 
 ---
 

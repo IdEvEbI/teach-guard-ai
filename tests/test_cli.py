@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from teach_guard.cli import app
@@ -27,11 +28,29 @@ def test_inspect_help() -> None:
     result = runner.invoke(app, ["inspect", "--help"])
     assert result.exit_code == 0
     assert "视频或音频" in result.stdout
+    assert "data/input" in result.stdout
+    assert "data/output" in result.stdout
 
 
 def test_inspect_missing_file(tmp_path: Path) -> None:
     result = runner.invoke(app, ["inspect", str(tmp_path / "missing.mp4")])
     assert result.exit_code != 0
+    assert "找不到输入文件" in result.stdout + result.stderr
+
+
+def test_inspect_resolves_default_input_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("INPUT_DIR", raising=False)
+    monkeypatch.delenv("OUTPUT_DIR", raising=False)
+    source = tmp_path / "data" / "input" / "clip.mp4"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"fake-media")
+
+    result = runner.invoke(app, ["inspect", "clip.mp4"])
+
+    assert result.exit_code == 0
+    manifests = list((tmp_path / "data" / "output").glob("*/manifest.json"))
+    assert len(manifests) == 1
 
 
 def test_inspect_writes_manifest(tmp_path: Path) -> None:
