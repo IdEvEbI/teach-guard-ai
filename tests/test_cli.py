@@ -52,6 +52,7 @@ def test_inspect_resolves_default_input_dir(tmp_path: Path, monkeypatch: pytest.
     run_dir = tmp_path / "data" / "output" / "clip"
     assert (run_dir / "manifest.json").is_file()
     assert (run_dir / "clip.mp3").is_file()
+    assert (run_dir / "clip.raw.md").is_file()
 
 
 def test_inspect_writes_manifest(tmp_path: Path) -> None:
@@ -71,10 +72,12 @@ def test_inspect_writes_manifest(tmp_path: Path) -> None:
     assert data["models"]["llm"]["provider"] == "deepseek"
     steps = {step["id"]: step["status"] for step in data["steps"]}
     assert steps["extract_audio"] == "skipped"
-    assert steps["transcribe"] == "pending"
+    assert steps["transcribe"] == "done"
     assert "audio" in data["artifacts"]
+    assert "transcript_raw_md" in data["artifacts"]
+    assert (run_dir / "clip.raw.md").is_file()
     assert "已创建运行目录" in result.stdout
-    assert "已跳过抽轨" in result.stdout
+    assert "已写出原始逐字稿" in result.stdout
 
 
 def test_inspect_mirrors_nested_input_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,3 +94,19 @@ def test_inspect_mirrors_nested_input_tree(tmp_path: Path, monkeypatch: pytest.M
     run_dir = tmp_path / "data" / "output" / "01_课" / "day01" / "00.介绍(了解)"
     assert (run_dir / "manifest.json").is_file()
     assert (run_dir / "00.介绍(了解).mp3").is_file()
+    assert (run_dir / "00.介绍(了解).raw.md").is_file()
+
+
+@pytest.mark.no_stub_transcribe
+def test_inspect_asr_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from teach_guard.transcribe import EXIT_ASR_MISSING, AsrMissingError
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise AsrMissingError()
+
+    monkeypatch.setattr("teach_guard.cli.transcribe_audio", boom)
+    source = tmp_path / "clip.mp3"
+    source.write_bytes(b"fake-media")
+    result = runner.invoke(app, ["inspect", str(source), "--output", str(tmp_path / "out")])
+    assert result.exit_code == EXIT_ASR_MISSING
+    assert "mlx-whisper" in result.stdout + result.stderr
