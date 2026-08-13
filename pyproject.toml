@@ -30,3 +30,8 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.basedpyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = ["src"]
