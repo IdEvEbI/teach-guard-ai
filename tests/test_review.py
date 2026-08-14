@@ -131,10 +131,20 @@ def test_render_report_splits_must_and_nice() -> None:
                 "what": "四天学什么。",
                 "how": "了解即可。",
                 "structure_note": "主线清楚。",
+                "learn_what": [
+                    {
+                        "layer": "chain",
+                        "status": "partial",
+                        "note": "讲了来时路，尚未说清如何支撑后续。",
+                    },
+                    {"layer": "outcome", "status": "missing", "note": "只报名，未见演示。"},
+                    {"layer": "days", "status": "covered", "note": "四天安排已讲。"},
+                ],
             },
             "must_fix": [
                 {
                     "item": "阶段末成果只停留在口头",
+                    "force": "design",
                     "clock": "00:10:00",
                     "quote": "学完就能做很多东西",
                     "fix": "共屏演示阶段末结果。",
@@ -151,15 +161,14 @@ def test_render_report_splits_must_and_nice() -> None:
             "playback": ["本段未出现自我介绍，待回放下一段。"],
             "concepts": [],
             "questions": {
-                "specific": [
+                "rhetorical": [
                     {
                         "clock": "00:08:00",
                         "quote": "这三大类算法的评估规则一样吗？",
-                        "waited": False,
-                        "gap_after": 0.0,
                     }
                 ],
-                "empty": [{"clock": "00:20:00", "quote": "是不是"}],
+                "specific": [],
+                "empty": [{"clock": "00:20:00", "quote": "能跟上我思路吧"}],
             },
             "conduct": {
                 "vulgar": [
@@ -176,23 +185,28 @@ def test_render_report_splits_must_and_nice() -> None:
         }
     )
     assert "## 合格线（必须改）" in markdown
+    assert "（设计）阶段末成果只停留在口头" in markdown
+    assert "### 阶段末成果只停留在口头" not in markdown
     assert "## 水平线（锦上添花）" in markdown
     assert "提问与留白" in markdown
     assert "对照录像" in markdown
     assert "不判断课堂上有没有形成问答" in markdown
     assert "接住" not in markdown
     assert "confirm.opening" not in markdown
-    assert "自己问自己答" in markdown
+    assert "这是设问" in markdown
     assert "待回放确认" not in markdown
     assert "疑似 ASR" not in markdown
     assert "只覆盖「学什么」" in markdown
     assert "板书" not in markdown
     assert "言行底线" in markdown
-    assert "低俗用语" in markdown
+    assert "1. 低俗用语：" in markdown
+    assert "### 低俗用语" not in markdown
     assert "这破课有什么用" in markdown
     assert "贬低或侮辱学员" in markdown
     assert "贬低前面授课老师" in markdown
     assert markdown.count("本段逐字稿上未发现这类话术") == 3
+    assert "「学什么」三层" in markdown
+    assert "培养链与就业关系" in markdown
 
 
 def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
@@ -229,6 +243,7 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
         assert "低俗用语" in system
         assert "贬低或侮辱学员" in system
         assert "贬低前面授课老师" in system
+        assert "design" in system
         payload = json.loads(user)
         assert payload["lesson_type"] == "stage_first"
         assert payload["wait_seconds"] == 2.0

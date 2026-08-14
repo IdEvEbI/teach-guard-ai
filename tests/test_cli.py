@@ -31,8 +31,10 @@ def test_inspect_help() -> None:
     assert "--type" in result.stdout
     assert "--punctuate" in result.stdout
     assert "--yes" in result.stdout
+    assert "--accept-screen" in result.stdout
+    assert "--ask-screen" in result.stdout
     assert "--wait-seconds" in result.stdout
-    assert "sf=stage_first" in result.stdout
+    assert "sf=" in result.stdout
 
 
 def test_inspect_missing_file(tmp_path: Path) -> None:
