@@ -185,6 +185,8 @@ def _build_user_payload(
     source_name: str,
     type_payload: dict[str, Any],
     segments: list[dict[str, Any]],
+    screen: dict[str, Any] | None = None,
+    confirm: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     lesson_type = normalize_lesson_type(str(type_payload.get("lesson_type") or ""))
     return {
@@ -196,6 +198,8 @@ def _build_user_payload(
         "ruler": str(type_payload.get("ruler") or "").strip(),
         "type_reasons": type_payload.get("reasons") or [],
         "transcript": compact_transcript(segments),
+        "screen": screen or {},
+        "confirm": confirm or {},
     }
 
 
@@ -340,18 +344,20 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
 
 
 def write_review(
-    punct_json_path: Path,
+    transcript_json_path: Path,
     type_json_path: Path,
     run_dir: Path,
     stem: str,
     *,
     source_name: str,
+    screen_json_path: Path | None = None,
+    confirm_json_path: Path | None = None,
     complete: JsonComplete | None = None,
 ) -> ReviewResult:
     try:
-        punct = json.loads(punct_json_path.read_text(encoding="utf-8"))
+        punct = json.loads(transcript_json_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ReviewError(f"建议报告失败：无法读取标点稿 {punct_json_path.name}") from exc
+        raise ReviewError(f"建议报告失败：无法读取逐字稿 {transcript_json_path.name}") from exc
     try:
         type_payload = json.loads(type_json_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -359,10 +365,33 @@ def write_review(
     if not isinstance(type_payload, dict):
         raise ReviewError("建议报告失败：课型判定不是 JSON 对象。")
 
+    screen: dict[str, Any] | None = None
+    if screen_json_path is not None and screen_json_path.is_file():
+        try:
+            loaded = json.loads(screen_json_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            loaded = None
+        if isinstance(loaded, dict):
+            screen = loaded
+    confirm: dict[str, Any] | None = None
+    if confirm_json_path is not None and confirm_json_path.is_file():
+        try:
+            loaded = json.loads(confirm_json_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            loaded = None
+        if isinstance(loaded, dict):
+            confirm = loaded
+
     segments = list(punct.get("segments") or [])
     system, prompt_version = load_review_prompt()
     user = json.dumps(
-        _build_user_payload(source_name=source_name, type_payload=type_payload, segments=segments),
+        _build_user_payload(
+            source_name=source_name,
+            type_payload=type_payload,
+            segments=segments,
+            screen=screen,
+            confirm=confirm,
+        ),
         ensure_ascii=False,
         indent=2,
     )

@@ -31,6 +31,9 @@ markers = [
     "no_stub_punctuate: 不 stub punctuate_transcript，用于测试标点失败路径",
     "no_stub_lesson_type: 不 stub classify_lesson_type，用于测试课型失败路径",
     "no_stub_review: 不 stub write_review，用于测试建议报告失败路径",
+    "no_stub_snapshot: 不 stub capture_snapshots",
+    "no_stub_screen_ocr: 不 stub ocr_snapshots",
+    "no_stub_confirm: 不 stub write_confirm，用于测试确认失败路径",
 ]
 
 [tool.basedpyright]
@@ -45,4 +48,8 @@ dev = [
 asr = [
     "mlx-whisper>=0.4.0",
     "httpx[socks]>=0.28.0",
+]
+ocr = [
+    "rapidocr>=2.0.0",
+    "onnxruntime>=1.20.0",
 ]
