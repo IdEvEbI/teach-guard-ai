@@ -9,6 +9,7 @@ from teach_guard.lesson_type import (
     classify_lesson_type,
     duration_seconds,
     head_segments,
+    load_type_if_present,
     normalize_lesson_type,
     parse_cli_lesson_type,
     render_type_markdown,
@@ -124,3 +125,25 @@ def test_render_type_markdown_includes_delivery() -> None:
     )
     assert "四天地图" in markdown
     assert "004" in markdown
+
+
+def test_load_type_if_present(tmp_path: Path) -> None:
+    json_path = tmp_path / "clip.type.json"
+    markdown_path = tmp_path / "clip.type.md"
+    json_path.write_text(
+        json.dumps(
+            {
+                "lesson_type": "stage_first",
+                "prompt_version": "v0.1+abc",
+                "model": "stub",
+                "overridden": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    markdown_path.write_text("# 课型判定\n", encoding="utf-8")
+    loaded = load_type_if_present(tmp_path, "clip")
+    assert loaded is not None
+    assert loaded.lesson_type == "stage_first"
+    assert loaded.prompt_version == "v0.1+abc"
+    assert load_type_if_present(tmp_path, "missing") is None

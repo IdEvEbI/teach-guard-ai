@@ -9,6 +9,7 @@ import pytest
 
 from teach_guard.lesson_type import LessonTypeResult
 from teach_guard.punctuate import PunctuateResult
+from teach_guard.review import ReviewResult
 from teach_guard.transcribe import TranscribeResult
 
 
@@ -110,3 +111,43 @@ def stub_lesson_type(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReq
         )
 
     monkeypatch.setattr("teach_guard.cli.classify_lesson_type", fake)
+
+
+@pytest.fixture(autouse=True)
+def stub_review(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    if request.node.get_closest_marker("no_stub_review"):
+        return
+
+    def fake(
+        punct_json_path: Path,
+        type_json_path: Path,
+        run_dir: Path,
+        stem: str,
+        *,
+        source_name: str,
+        **_kwargs: object,
+    ) -> ReviewResult:
+        del punct_json_path, source_name
+        lesson_type = "intro"
+        if type_json_path.is_file():
+            try:
+                lesson_type = str(json.loads(type_json_path.read_text(encoding="utf-8")).get("lesson_type") or "intro")
+            except json.JSONDecodeError:
+                lesson_type = "intro"
+        json_path = run_dir / f"{stem}.report.json"
+        markdown_path = run_dir / f"{stem}.report.md"
+        payload = {
+            "lesson_type": lesson_type,
+            "summary": "stub",
+            "must_fix": [],
+        }
+        json_path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+        markdown_path.write_text("# 精查报告\n\nstub\n", encoding="utf-8")
+        return ReviewResult(
+            markdown_path=markdown_path,
+            json_path=json_path,
+            prompt_version="stub",
+            model="stub-llm",
+        )
+
+    monkeypatch.setattr("teach_guard.cli.write_review", fake)
