@@ -19,6 +19,8 @@ from teach_guard.lesson_type import (
 def test_normalize_and_parse() -> None:
     assert parse_cli_lesson_type("stage_first") == "stage_first"
     assert parse_cli_lesson_type("Stage-First") == "stage_first"
+    assert parse_cli_lesson_type("sf") == "stage_first"
+    assert parse_cli_lesson_type("in") == "intro"
     assert normalize_lesson_type("intro") == "intro"
     assert normalize_lesson_type("encyclopedia") == "other"
 

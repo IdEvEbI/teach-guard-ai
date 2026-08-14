@@ -130,6 +130,8 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
         payload = json.loads(user)
         assert payload["lesson_type"] == "stage_first"
         assert "[00:00:00] 本阶段课程设计一共是四天。" in payload["transcript"]
+        assert "screen" not in payload
+        assert payload["confirm"]["opening"]["today_goal"] == "missing_must_fix"
         return {
             "summary": "本段只覆盖学什么。",
             "delivery": "建立四天地图。",
@@ -162,12 +164,25 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
             "asr_suspects": [],
         }
 
+    confirm = tmp_path / "clip.confirm.json"
+    confirm.write_text(
+        json.dumps(
+            {
+                "terms": [{"clock": "00:00:20", "heard": "了解即可", "canonical": "了解即可"}],
+                "opening": {"today_goal": "missing_must_fix"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
     result = write_review(
         punct,
         typed,
         tmp_path,
         "clip",
         source_name="大纲介绍.avi",
+        confirm_json_path=confirm,
         complete=complete,
     )
     data = json.loads(result.json_path.read_text(encoding="utf-8"))

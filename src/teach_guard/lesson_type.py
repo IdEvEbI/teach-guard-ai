@@ -83,8 +83,26 @@ def load_type_prompt() -> tuple[str, str]:
     return text, f"{version}+{digest}"
 
 
+TYPE_ALIASES = {
+    "sf": "stage_first",
+    "in": "intro",
+    "pr": "practice",
+    "sy": "syntax",
+    "ca": "case",
+    "pl": "principle",
+    "pj": "project",
+    "ot": "other",
+}
+
+TYPE_HELP = (
+    "覆盖课型。短名：sf=stage_first，in=intro，pr=practice，sy=syntax，"
+    "ca=case，pl=principle，pj=project，ot=other。也可用全名。"
+)
+
+
 def normalize_lesson_type(value: str | None) -> str:
     key = (value or "").strip().lower().replace("-", "_")
+    key = TYPE_ALIASES.get(key, key)
     if key not in LESSON_TYPES:
         return "other"
     return key
@@ -92,8 +110,9 @@ def normalize_lesson_type(value: str | None) -> str:
 
 def parse_cli_lesson_type(value: str) -> str:
     key = value.strip().lower().replace("-", "_")
+    key = TYPE_ALIASES.get(key, key)
     if key not in LESSON_TYPES:
-        allowed = "、".join(LESSON_TYPES)
+        allowed = "、".join(f"{short}={full}" for short, full in TYPE_ALIASES.items())
         raise ValueError(f"课型必须是：{allowed}")
     return key
 

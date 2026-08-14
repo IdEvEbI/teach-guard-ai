@@ -21,7 +21,11 @@ PIPELINE_STEPS = (
     "extract_audio",
     "transcribe",
     "punctuate",
+    "snapshot",
+    "screen_ocr",
     "lesson_type",
+    "confirm",
+    "checked",
     "review",
 )
 
@@ -119,7 +123,10 @@ def mark_step(run_dir: Path, step_id: str, status: str, *, error: str | None = N
                 step.pop("error", None)
             save_manifest(run_dir, data)
             return
-    raise KeyError(f"运行清单中没有步骤 {step_id}")
+    data.setdefault("steps", []).append(
+        {"id": step_id, "status": status, **({"error": error} if error else {})}
+    )
+    save_manifest(run_dir, data)
 
 
 def set_artifact(run_dir: Path, name: str, path: Path) -> None:

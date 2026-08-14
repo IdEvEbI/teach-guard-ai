@@ -29,7 +29,9 @@ def test_inspect_help() -> None:
     assert result.exit_code == 0
     assert "视频或音频" in result.stdout
     assert "--type" in result.stdout
-    assert "stage_first" in result.stdout
+    assert "--punctuate" in result.stdout
+    assert "--yes" in result.stdout
+    assert "sf=stage_first" in result.stdout
 
 
 def test_inspect_missing_file(tmp_path: Path) -> None:
@@ -51,9 +53,10 @@ def test_inspect_resolves_default_input_dir(tmp_path: Path, monkeypatch: pytest.
     assert result.exit_code == 0
     run_dir = tmp_path / "data" / "output" / "clip"
     assert (run_dir / "clip.raw.md").is_file()
-    assert (run_dir / "clip.punct.md").is_file()
     assert (run_dir / "clip.type.md").is_file()
     assert (run_dir / "clip.report.md").is_file()
+    assert (run_dir / "clip.screen.md").is_file()
+    assert not (run_dir / "clip.punct.md").is_file()
 
 
 def test_inspect_writes_manifest(tmp_path: Path) -> None:
@@ -74,23 +77,27 @@ def test_inspect_writes_manifest(tmp_path: Path) -> None:
     steps = {step["id"]: step["status"] for step in data["steps"]}
     assert steps["extract_audio"] == "skipped"
     assert steps["transcribe"] == "done"
-    assert steps["punctuate"] == "done"
+    assert steps["punctuate"] == "skipped"
+    assert steps["snapshot"] == "skipped"
+    assert steps["screen_ocr"] == "done"
     assert steps["lesson_type"] == "done"
+    assert steps["confirm"] == "done"
+    assert steps["checked"] == "done"
     assert steps["review"] == "done"
-    assert "transcript_punct_md" in data["artifacts"]
-    assert "lesson_type_md" in data["artifacts"]
+    assert "transcript_punct_md" not in data["artifacts"]
+    assert "screen_md" in data["artifacts"]
+    assert "confirm_md" in data["artifacts"]
+    assert "transcript_checked_md" in data["artifacts"]
     assert "report_md" in data["artifacts"]
-    assert data["models"]["llm"]["status"] == "done"
-    assert data["prompts"]["versions"]["punctuate"] == "stub"
-    assert data["prompts"]["versions"]["pedagogy_type"] == "stub"
-    assert data["prompts"]["versions"]["review"] == "stub"
+    assert data["models"]["llm"]["status"] == "not_run" or data["models"]["llm"]["status"] == "done"
+    assert data["prompts"]["versions"].get("review") == "stub"
+    assert data["prompts"]["versions"].get("confirm") == "stub"
     assert (run_dir / "clip.raw.md").is_file()
-    assert (run_dir / "clip.punct.md").is_file()
     assert (run_dir / "clip.type.md").is_file()
     assert (run_dir / "clip.report.md").is_file()
     assert "已创建运行目录" in result.stdout
     assert "已写出原始逐字稿" in result.stdout
-    assert "已写出标点逐字稿" in result.stdout
+    assert "跳过标点" in result.stdout
     assert "已写出课型判定" in result.stdout
     assert "已写出建议报告" in result.stdout
 
@@ -110,9 +117,9 @@ def test_inspect_mirrors_nested_input_tree(tmp_path: Path, monkeypatch: pytest.M
     assert (run_dir / "manifest.json").is_file()
     assert (run_dir / "00.介绍(了解).mp3").is_file()
     assert (run_dir / "00.介绍(了解).raw.md").is_file()
-    assert (run_dir / "00.介绍(了解).punct.md").is_file()
     assert (run_dir / "00.介绍(了解).type.md").is_file()
     assert (run_dir / "00.介绍(了解).report.md").is_file()
+    assert (run_dir / "00.介绍(了解).screen.md").is_file()
 
 
 @pytest.mark.no_stub_transcribe
@@ -143,7 +150,9 @@ def test_inspect_skips_extract_and_transcribe_when_reused(tmp_path: Path, monkey
     monkeypatch.setattr("teach_guard.cli.transcribe_audio", boom)
     monkeypatch.setattr("teach_guard.cli.punctuate_transcript", boom)
     monkeypatch.setattr("teach_guard.cli.classify_lesson_type", boom)
-    second = runner.invoke(app, ["inspect", str(source), "--output", str(output_root)])
+    monkeypatch.setattr("teach_guard.cli.capture_snapshots", boom)
+    monkeypatch.setattr("teach_guard.cli.ocr_snapshots", boom)
+    second = runner.invoke(app, ["inspect", str(source), "--output", str(output_root), "--yes"])
     assert second.exit_code == 0
     assert "复用运行目录" in second.stdout
     assert "跳过转写" in second.stdout
@@ -154,6 +163,10 @@ def test_inspect_skips_extract_and_transcribe_when_reused(tmp_path: Path, monkey
     data = json.loads((output_root / "clip" / "manifest.json").read_text(encoding="utf-8"))
     steps = {step["id"]: step["status"] for step in data["steps"]}
     assert steps["lesson_type"] == "skipped"
+    assert steps["screen_ocr"] == "skipped"
+    assert steps["snapshot"] == "skipped"
+    assert steps["confirm"] == "skipped"
+    assert steps["checked"] == "done"
     assert steps["review"] == "done"
 
 
@@ -162,7 +175,7 @@ def test_inspect_type_override(tmp_path: Path) -> None:
     source.write_bytes(b"fake-media")
     result = runner.invoke(
         app,
-        ["inspect", str(source), "--output", str(tmp_path / "out"), "--type", "stage_first"],
+        ["inspect", str(source), "--output", str(tmp_path / "out"), "--type", "sf"],
     )
     assert result.exit_code == 0
     data = json.loads((tmp_path / "out" / "clip" / "clip.type.json").read_text(encoding="utf-8"))
@@ -183,7 +196,7 @@ def test_inspect_rejects_unknown_type(tmp_path: Path) -> None:
     assert "课型必须是" in result.stdout + result.stderr
 
 
-@pytest.mark.no_stub_punctuate
+@pytest.mark.no_stub_confirm
 def test_inspect_missing_llm_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from teach_guard.llm import EXIT_LLM_CONFIG
 

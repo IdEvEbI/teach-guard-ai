@@ -54,13 +54,14 @@ npm run lint:md     # Markdownlint 检查
 ```bash
 uv sync
 uv sync --group asr   # 本机转写：mlx-whisper；若走 SOCKS 代理会带上 httpx[socks]
+uv sync --group ocr   # 画面词表：RapidOCR（Mac / Windows 同一引擎）
 uv run teach-guard --help
 uv run teach-guard check
 uv run teach-guard inspect --help
 uv run teach-guard inspect <视频或音频文件>
 ```
 
-课例默认放在 `data/input/`。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录，写入 `manifest.json`、同名音频、未补标点的 `{stem}.raw.md` / `{stem}.raw.json`、只补标点的 `{stem}.punct.md` / `{stem}.punct.json`、课型判定 `{stem}.type.md` / `{stem}.type.json`，以及建议报告 `{stem}.report.md` / `{stem}.report.json`。已有音轨、原始逐字稿、标点稿或课型判定时会跳过对应步骤（`--type` 覆盖时仍会重写课型）。建议报告每次重跑。可用 `--type` 覆盖课型。`scan` 尚未实现。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
+课例默认放在 `data/input/`。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录，写入 `manifest.json`、音轨、`{stem}.raw.md`、`snapshot/`、画面词表、确认记录、确认逐字稿、课型与建议报告。默认跳过标点（`--punctuate` 可打开）。已有产物会跳过对应步骤。`--type` 可用短名（见 `--help`）。确认步骤可用 `--yes` 跳过提问。`scan` 尚未实现。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 
 ---
 

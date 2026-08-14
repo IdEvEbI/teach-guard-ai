@@ -7,9 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from teach_guard.confirm import ConfirmResult
 from teach_guard.lesson_type import LessonTypeResult
 from teach_guard.punctuate import PunctuateResult
 from teach_guard.review import ReviewResult
+from teach_guard.screen_ocr import ScreenOcrResult
+from teach_guard.snapshot import SnapshotResult, snapshot_dir
 from teach_guard.transcribe import TranscribeResult
 
 
@@ -151,3 +154,61 @@ def stub_review(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest)
         )
 
     monkeypatch.setattr("teach_guard.cli.write_review", fake)
+
+
+@pytest.fixture(autouse=True)
+def stub_snapshot(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    if request.node.get_closest_marker("no_stub_snapshot"):
+        return
+
+    def fake(source: Path, run_dir: Path, **_kwargs: object) -> SnapshotResult:
+        del source
+        directory = snapshot_dir(run_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        return SnapshotResult(directory=directory, frames=[], skipped=True)
+
+    monkeypatch.setattr("teach_guard.cli.capture_snapshots", fake)
+
+
+@pytest.fixture(autouse=True)
+def stub_screen_ocr(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    if request.node.get_closest_marker("no_stub_screen_ocr"):
+        return
+
+    def fake(frames: list[Path], run_dir: Path, stem: str, **_kwargs: object) -> ScreenOcrResult:
+        del frames
+        payload = {"engine": "stub", "interval_seconds": 10, "frames": []}
+        json_path = run_dir / f"{stem}.screen.json"
+        markdown_path = run_dir / f"{stem}.screen.md"
+        json_path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+        markdown_path.write_text("# 画面词表\n\nstub\n", encoding="utf-8")
+        return ScreenOcrResult(
+            json_path=json_path,
+            markdown_path=markdown_path,
+            frame_count=0,
+            engine="stub",
+        )
+
+    monkeypatch.setattr("teach_guard.cli.ocr_snapshots", fake)
+
+
+@pytest.fixture(autouse=True)
+def stub_confirm(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    if request.node.get_closest_marker("no_stub_confirm"):
+        return
+
+    def fake(run_dir: Path, stem: str, **_kwargs: object) -> ConfirmResult:
+        payload = {"auto": True, "terms": [], "opening": {}, "prompt_version": "stub", "model": "stub"}
+        json_path = run_dir / f"{stem}.confirm.json"
+        markdown_path = run_dir / f"{stem}.confirm.md"
+        json_path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+        markdown_path.write_text("# 确认记录\n\nstub\n", encoding="utf-8")
+        return ConfirmResult(
+            json_path=json_path,
+            markdown_path=markdown_path,
+            auto=True,
+            prompt_version="stub",
+            model="stub",
+        )
+
+    monkeypatch.setattr("teach_guard.cli.write_confirm", fake)
