@@ -32,8 +32,10 @@ from teach_guard.lesson_type import (
     EXIT_LESSON_TYPE_FAILED,
     LessonTypeError,
     classify_lesson_type,
+    load_type_if_present,
     parse_cli_lesson_type,
 )
+from teach_guard.review import EXIT_REVIEW_FAILED, ReviewError, write_review
 from teach_guard.llm import EXIT_LLM_CONFIG, LlmConfigError, llm_api_key
 from teach_guard.paths import DEFAULT_INPUT_DIR, DEFAULT_OUTPUT_DIR, get_output_dir, resolve_input_file
 from teach_guard.punctuate import (
@@ -86,7 +88,10 @@ def check() -> None:
         "mlx-whisper："
         + ("已安装" if asr_ok else "未安装（转写需要，可用 uv sync --group asr 安装）")
     )
-    typer.echo("LLM_API_KEY：" + ("已设置" if key_ok else "未设置（标点需要，请复制 .env.example 为 .env 并填写）"))
+    typer.echo(
+        "LLM_API_KEY："
+        + ("已设置" if key_ok else "未设置（标点与建议报告需要，请复制 .env.example 为 .env 并填写）")
+    )
 
     if not python_ok:
         raise typer.Exit(code=1)
@@ -119,7 +124,7 @@ def inspect(
         ),
     ] = None,
 ) -> None:
-    """为单个视频抽轨、转写、补标点，并识别课型。建议报告尚未实现。"""
+    """为单个视频抽轨、转写、补标点、识别课型，并写出建议报告。"""
     override: str | None = None
     if lesson_type:
         try:
@@ -243,27 +248,59 @@ def inspect(
         )
         typer.echo(f"已写出标点逐字稿：{punctuated.markdown_path}")
 
-    typer.echo("正在识别课型…" if override is None else f"使用命令行覆盖课型：{override}")
+    existing_type = load_type_if_present(run_dir, stem) if prep.reused and override is None else None
+    if existing_type is not None:
+        typed = existing_type
+        set_artifact(run_dir, "lesson_type_md", typed.markdown_path)
+        set_artifact(run_dir, "lesson_type_json", typed.json_path)
+        set_prompt_version(run_dir, "pedagogy_type", typed.prompt_version)
+        mark_step(run_dir, "lesson_type", "skipped")
+        typer.echo(f"已有课型判定，跳过识别：{typed.markdown_path}（`{typed.lesson_type}`）")
+    else:
+        typer.echo("正在识别课型…" if override is None else f"使用命令行覆盖课型：{override}")
+        try:
+            typed = classify_lesson_type(
+                punctuated.json_path,
+                run_dir,
+                stem,
+                source_name=resolved.name,
+                override=override,
+            )
+        except LlmConfigError as exc:
+            mark_step(run_dir, "lesson_type", "failed", error=str(exc))
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=EXIT_LLM_CONFIG) from exc
+        except LessonTypeError as exc:
+            mark_step(run_dir, "lesson_type", "failed", error=str(exc))
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=EXIT_LESSON_TYPE_FAILED) from exc
+
+        set_artifact(run_dir, "lesson_type_md", typed.markdown_path)
+        set_artifact(run_dir, "lesson_type_json", typed.json_path)
+        set_prompt_version(run_dir, "pedagogy_type", typed.prompt_version)
+        mark_step(run_dir, "lesson_type", "done")
+        typer.echo(f"已写出课型判定：{typed.markdown_path}（`{typed.lesson_type}`）")
+
+    typer.echo("正在写建议报告…")
     try:
-        typed = classify_lesson_type(
+        reviewed = write_review(
             punctuated.json_path,
+            typed.json_path,
             run_dir,
             stem,
             source_name=resolved.name,
-            override=override,
         )
     except LlmConfigError as exc:
-        mark_step(run_dir, "lesson_type", "failed", error=str(exc))
+        mark_step(run_dir, "review", "failed", error=str(exc))
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=EXIT_LLM_CONFIG) from exc
-    except LessonTypeError as exc:
-        mark_step(run_dir, "lesson_type", "failed", error=str(exc))
+    except ReviewError as exc:
+        mark_step(run_dir, "review", "failed", error=str(exc))
         typer.echo(str(exc), err=True)
-        raise typer.Exit(code=EXIT_LESSON_TYPE_FAILED) from exc
+        raise typer.Exit(code=EXIT_REVIEW_FAILED) from exc
 
-    set_artifact(run_dir, "lesson_type_md", typed.markdown_path)
-    set_artifact(run_dir, "lesson_type_json", typed.json_path)
-    set_prompt_version(run_dir, "pedagogy_type", typed.prompt_version)
-    mark_step(run_dir, "lesson_type", "done")
-    typer.echo(f"已写出课型判定：{typed.markdown_path}（`{typed.lesson_type}`）")
-    typer.echo("后续步骤（建议报告）尚未实现。")
+    set_artifact(run_dir, "report_md", reviewed.markdown_path)
+    set_artifact(run_dir, "report_json", reviewed.json_path)
+    set_prompt_version(run_dir, "review", reviewed.prompt_version)
+    mark_step(run_dir, "review", "done")
+    typer.echo(f"已写出建议报告：{reviewed.markdown_path}")

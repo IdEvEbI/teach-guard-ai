@@ -171,6 +171,28 @@ def _build_user_payload(*, source_name: str, segments: list[dict[str, Any]]) -> 
     }
 
 
+def load_type_if_present(run_dir: Path, stem: str) -> LessonTypeResult | None:
+    json_path = run_dir / f"{stem}.type.json"
+    markdown_path = run_dir / f"{stem}.type.md"
+    if not json_path.is_file() or not markdown_path.is_file():
+        return None
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    lesson_type = normalize_lesson_type(str(payload.get("lesson_type") or ""))
+    return LessonTypeResult(
+        markdown_path=markdown_path,
+        json_path=json_path,
+        lesson_type=lesson_type,
+        prompt_version=str(payload.get("prompt_version") or "unknown"),
+        model=str(payload.get("model") or "unknown"),
+        overridden=bool(payload.get("overridden")),
+    )
+
+
 def classify_lesson_type(
     punct_json_path: Path,
     run_dir: Path,

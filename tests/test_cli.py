@@ -53,6 +53,7 @@ def test_inspect_resolves_default_input_dir(tmp_path: Path, monkeypatch: pytest.
     assert (run_dir / "clip.raw.md").is_file()
     assert (run_dir / "clip.punct.md").is_file()
     assert (run_dir / "clip.type.md").is_file()
+    assert (run_dir / "clip.report.md").is_file()
 
 
 def test_inspect_writes_manifest(tmp_path: Path) -> None:
@@ -75,18 +76,23 @@ def test_inspect_writes_manifest(tmp_path: Path) -> None:
     assert steps["transcribe"] == "done"
     assert steps["punctuate"] == "done"
     assert steps["lesson_type"] == "done"
+    assert steps["review"] == "done"
     assert "transcript_punct_md" in data["artifacts"]
     assert "lesson_type_md" in data["artifacts"]
+    assert "report_md" in data["artifacts"]
     assert data["models"]["llm"]["status"] == "done"
     assert data["prompts"]["versions"]["punctuate"] == "stub"
     assert data["prompts"]["versions"]["pedagogy_type"] == "stub"
+    assert data["prompts"]["versions"]["review"] == "stub"
     assert (run_dir / "clip.raw.md").is_file()
     assert (run_dir / "clip.punct.md").is_file()
     assert (run_dir / "clip.type.md").is_file()
+    assert (run_dir / "clip.report.md").is_file()
     assert "已创建运行目录" in result.stdout
     assert "已写出原始逐字稿" in result.stdout
     assert "已写出标点逐字稿" in result.stdout
     assert "已写出课型判定" in result.stdout
+    assert "已写出建议报告" in result.stdout
 
 
 def test_inspect_mirrors_nested_input_tree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,6 +112,7 @@ def test_inspect_mirrors_nested_input_tree(tmp_path: Path, monkeypatch: pytest.M
     assert (run_dir / "00.介绍(了解).raw.md").is_file()
     assert (run_dir / "00.介绍(了解).punct.md").is_file()
     assert (run_dir / "00.介绍(了解).type.md").is_file()
+    assert (run_dir / "00.介绍(了解).report.md").is_file()
 
 
 @pytest.mark.no_stub_transcribe
@@ -135,13 +142,19 @@ def test_inspect_skips_extract_and_transcribe_when_reused(tmp_path: Path, monkey
 
     monkeypatch.setattr("teach_guard.cli.transcribe_audio", boom)
     monkeypatch.setattr("teach_guard.cli.punctuate_transcript", boom)
+    monkeypatch.setattr("teach_guard.cli.classify_lesson_type", boom)
     second = runner.invoke(app, ["inspect", str(source), "--output", str(output_root)])
     assert second.exit_code == 0
     assert "复用运行目录" in second.stdout
     assert "跳过转写" in second.stdout
     assert "已有音轨" in second.stdout
     assert "跳过标点" in second.stdout
-    assert "已写出课型判定" in second.stdout
+    assert "跳过识别" in second.stdout
+    assert "已写出建议报告" in second.stdout
+    data = json.loads((output_root / "clip" / "manifest.json").read_text(encoding="utf-8"))
+    steps = {step["id"]: step["status"] for step in data["steps"]}
+    assert steps["lesson_type"] == "skipped"
+    assert steps["review"] == "done"
 
 
 def test_inspect_type_override(tmp_path: Path) -> None:
@@ -156,6 +169,7 @@ def test_inspect_type_override(tmp_path: Path) -> None:
     assert data["lesson_type"] == "stage_first"
     assert data["overridden"] is True
     assert "覆盖课型" in result.stdout
+    assert (tmp_path / "out" / "clip" / "clip.report.md").is_file()
 
 
 def test_inspect_rejects_unknown_type(tmp_path: Path) -> None:

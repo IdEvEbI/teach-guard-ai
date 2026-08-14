@@ -61,7 +61,7 @@ def _friendly_llm_error(exc: BaseException) -> str:
     return f"调用大模型失败：{detail}"
 
 
-def chat_json(*, system: str, user: str) -> dict[str, Any]:
+def chat_json(*, system: str, user: str, timeout: float = 120.0) -> dict[str, Any]:
     """发送 system + user，解析模型返回的 JSON 对象。"""
     api_key = require_api_key()
     try:
@@ -69,7 +69,7 @@ def chat_json(*, system: str, user: str) -> dict[str, Any]:
     except ImportError as exc:
         raise LlmConfigError("未安装 openai 包（请执行 uv sync 后重试）") from exc
 
-    client = OpenAI(api_key=api_key, base_url=llm_base_url(), timeout=120.0)
+    client = OpenAI(api_key=api_key, base_url=llm_base_url(), timeout=timeout)
     try:
         response = client.chat.completions.create(
             model=llm_model(),
