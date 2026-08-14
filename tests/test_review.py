@@ -8,10 +8,58 @@ from pathlib import Path
 from teach_guard.review import (
     compact_transcript,
     keep_cited,
+    normalize_conduct,
     render_report_markdown,
+    rewrite_coverage,
     without_blackboard,
     write_review,
 )
+
+
+def test_rewrite_coverage_uses_plain_chinese() -> None:
+    text = rewrite_coverage(
+        lesson_type="stage_first",
+        opening={
+            "self_intro": "prior_stage_short",
+            "class_norms": "prior_stage_short",
+            "today_goal": "missing_must_fix",
+        },
+        model_coverage=(
+            "本段覆盖了「学什么」。根据 confirm.opening，自我介绍属于 prior_stage_short，"
+            "今日目标属于 missing_must_fix。"
+        ),
+    )
+    assert "confirm.opening" not in text
+    assert "prior_stage_short" not in text
+    assert "missing_must_fix" not in text
+    assert "自我介绍和班级约定已带过前一阶段" in text
+    assert "今日目标当天没有，需要补" in text
+    assert "学什么" in text
+    again = rewrite_coverage(
+        lesson_type="stage_first",
+        opening={
+            "self_intro": "prior_stage_short",
+            "class_norms": "prior_stage_short",
+            "today_goal": "missing_must_fix",
+        },
+        model_coverage=text,
+    )
+    assert again == text
+    paraphrased = rewrite_coverage(
+        lesson_type="stage_first",
+        opening={
+            "self_intro": "prior_stage_short",
+            "class_norms": "prior_stage_short",
+            "today_goal": "missing_must_fix",
+        },
+        model_coverage=(
+            "本段覆盖了阶段第一课开场的「学什么」部分，包括机器学习概述。"
+            "自我介绍与班级约定已带过前一阶段，用短话术收束即可。"
+            "今日目标当天没有，需要补。"
+        ),
+    )
+    assert paraphrased.count("今日目标当天没有") == 1
+    assert paraphrased.count("自我介绍") == 1
 
 
 def test_without_blackboard_rewrites_fix_language() -> None:
@@ -32,6 +80,23 @@ def test_keep_cited_drops_items_without_quote() -> None:
         ]
     )
     assert [item["item"] for item in kept] == ["缺就业必要性"]
+
+
+def test_normalize_conduct_drops_uncited() -> None:
+    data = normalize_conduct(
+        {
+            "vulgar": [
+                {"clock": "00:01:00", "quote": "这句有脏口", "fix": "改成课堂用词。"},
+                {"clock": "", "quote": "没有时间锚", "fix": "应丢弃。"},
+            ],
+            "disparage_course": [{"item": "空", "clock": "00:02:00", "quote": ""}],
+            "disparage_teacher": "不是列表",
+        }
+    )
+    assert [item["quote"] for item in data["vulgar"]] == ["这句有脏口"]
+    assert data["disparage_course"] == []
+    assert data["disparage_student"] == []
+    assert data["disparage_teacher"] == []
 
 
 def test_compact_transcript_uses_start_clock() -> None:
@@ -85,16 +150,49 @@ def test_render_report_splits_must_and_nice() -> None:
             ],
             "playback": ["本段未出现自我介绍，待回放下一段。"],
             "concepts": [],
-            "asr_suspects": [{"clock": "00:08:00", "heard": "K 近林", "likely": "K 近邻"}],
+            "questions": {
+                "specific": [
+                    {
+                        "clock": "00:08:00",
+                        "quote": "这三大类算法的评估规则一样吗？",
+                        "waited": False,
+                        "gap_after": 0.0,
+                    }
+                ],
+                "empty": [{"clock": "00:20:00", "quote": "是不是"}],
+            },
+            "conduct": {
+                "vulgar": [
+                    {
+                        "clock": "00:03:00",
+                        "quote": "这破课有什么用",
+                        "fix": "改成说明本课和后续学习的关系。",
+                    }
+                ],
+                "disparage_course": [],
+            },
             "model": "stub",
             "prompt_version": "v0.1",
         }
     )
     assert "## 合格线（必须改）" in markdown
     assert "## 水平线（锦上添花）" in markdown
+    assert "提问与留白" in markdown
+    assert "对照录像" in markdown
+    assert "不判断课堂上有没有形成问答" in markdown
+    assert "接住" not in markdown
+    assert "confirm.opening" not in markdown
+    assert "自己问自己答" in markdown
+    assert "待回放确认" not in markdown
+    assert "疑似 ASR" not in markdown
     assert "只覆盖「学什么」" in markdown
-    assert "不要当成老师合格线问题" in markdown
     assert "板书" not in markdown
+    assert "言行底线" in markdown
+    assert "低俗用语" in markdown
+    assert "这破课有什么用" in markdown
+    assert "贬低或侮辱学员" in markdown
+    assert "贬低前面授课老师" in markdown
+    assert markdown.count("本段逐字稿上未发现这类话术") == 3
 
 
 def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
@@ -127,8 +225,13 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
 
     def complete(*, system: str, user: str) -> dict[str, object]:
         assert "对事不对人" in system
+        assert "禁止电报体" in system
+        assert "低俗用语" in system
+        assert "贬低或侮辱学员" in system
+        assert "贬低前面授课老师" in system
         payload = json.loads(user)
         assert payload["lesson_type"] == "stage_first"
+        assert payload["wait_seconds"] == 2.0
         assert "[00:00:00] 本阶段课程设计一共是四天。" in payload["transcript"]
         assert "screen" not in payload
         assert payload["confirm"]["opening"]["today_goal"] == "missing_must_fix"
@@ -161,6 +264,20 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
             "nice_to_have": [{"item": "时长观察", "suggestion": "可再收一收。"}],
             "playback": ["未出现自我介绍，待回放。"],
             "concepts": [],
+            "questions": {
+                "specific": [{"clock": "00:00:20", "quote": "了解即可吗"}],
+                "empty": [],
+            },
+            "conduct": {
+                "vulgar": [{"clock": "", "quote": "", "fix": "无摘句应丢弃。"}],
+                "disparage_course": [
+                    {
+                        "clock": "00:00:04",
+                        "quote": "这课就是骗钱的",
+                        "fix": "改成说明本课和就业的关系。",
+                    }
+                ],
+            },
             "asr_suspects": [],
         }
 
@@ -189,5 +306,13 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
     assert data["must_fix"] == []
     markdown = result.markdown_path.read_text(encoding="utf-8")
     assert "编造的缺口" not in markdown
-    assert "未出现自我介绍" in markdown
+    assert "待回放确认" not in markdown
+    assert "未出现自我介绍" not in markdown
+    assert "提问与留白" in markdown
+    assert "了解即可吗" in markdown
     assert "只覆盖「学什么」" in markdown
+    assert "言行底线" in markdown
+    assert "这课就是骗钱的" in markdown
+    assert "无摘句应丢弃" not in markdown
+    assert data["conduct"]["vulgar"] == []
+    assert data["conduct"]["disparage_course"][0]["quote"] == "这课就是骗钱的"
