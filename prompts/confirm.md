@@ -9,7 +9,7 @@
 
 对照 `transcript` 与 `screen`。若稿上的词像听写错误，且画面上有更可能的专名，列入 `terms`。没有把握就不要编。
 
-每条包含：`clock`（稿上时间）、`heard`（稿上原词）、`screen`（画面用词，没有则空字符串）、`snapshot`（如 `snapshot/00600.jpg`）。
+每条包含：`clock`（稿上时间）、`heard`（稿上原词）、`screen`（画面用词，没有则空字符串）、`snapshot`（如 `snapshot/00-10-10.jpg`）。同一条专名只列一次。
 
 ## 开场三项（仅 `stage_first`）
 
@@ -24,7 +24,7 @@
       "clock": "00:10:10",
       "heard": "CRT决策数",
       "screen": "CART决策树",
-      "snapshot": "snapshot/00600.jpg"
+      "snapshot": "snapshot/00-10-10.jpg"
     }
   ],
   "opening_needed": ["self_intro", "class_norms", "today_goal"]

@@ -53,15 +53,15 @@
 
 每个 GitHub Issue 对应一个 PR，按表中顺序往下做。尚未开出的项等当前 Issue 合入后再开。
 
-| ID   | 建议标题                                      | 跟踪                                                                          | 验收要点                                                                       |
-| ---- | --------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| E1-1 | `feat(cli): inspect 入口、输出目录与运行清单` | 已完成（[#9](https://github.com/IdEvEbI/teach-guard-ai/issues/9) / PR #10）   | `teach-guard inspect --help`；写出 `data/output/` 与运行清单骨架               |
-| E2-1 | `feat(media): ffmpeg 抽轨为 mp3`              | 已完成（[#11](https://github.com/IdEvEbI/teach-guard-ai/issues/11) / PR #12） | 视频得到音频；已是音频则跳过；失败有明确退出码                                 |
-| E2-2 | `feat(asr): mlx-whisper 转写`                 | 已完成（[#15](https://github.com/IdEvEbI/teach-guard-ai/issues/15) / PR #16） | 带时间信息的原始逐字稿；默认 `large-v3-turbo`                                  |
-| E3-1 | `feat(llm): DeepSeek 分段标点（不改词）`      | 已完成（[#17](https://github.com/IdEvEbI/teach-guard-ai/issues/17) / PR #18） | 分段标点、不改词、保留时间锚与工具口述；密钥不进日志                           |
-| E3-2 | `feat(pedagogy): 六课型识别`                  | 已完成（[#19](https://github.com/IdEvEbI/teach-guard-ai/issues/19) / PR #20） | 枚举与 PRD 第 5 节一致（含 `stage_first`）；可 `--type` 覆盖；不确定为 `other` |
-| E3-3 | `feat(review): 概念、示例、结构与建议报告`    | 已完成（[#21](https://github.com/IdEvEbI/teach-guard-ai/issues/21) / PR #23） | 合格线 / 水平线分栏；无摘句不得写必须改；**不打分**                            |
-| E3-4 | `feat(inspect): 截图、RapidOCR 与 CLI 确认`   | [#22](https://github.com/IdEvEbI/teach-guard-ai/issues/22)                    | 10 秒截图；RapidOCR 词表；确认后再出报告；`--type` 短名；默认跳过标点          |
+| ID   | 建议标题                                      | 跟踪                                                                          | 验收要点                                                                          |
+| ---- | --------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| E1-1 | `feat(cli): inspect 入口、输出目录与运行清单` | 已完成（[#9](https://github.com/IdEvEbI/teach-guard-ai/issues/9) / PR #10）   | `teach-guard inspect --help`；写出 `data/output/` 与运行清单骨架                  |
+| E2-1 | `feat(media): ffmpeg 抽轨为 mp3`              | 已完成（[#11](https://github.com/IdEvEbI/teach-guard-ai/issues/11) / PR #12） | 视频得到音频；已是音频则跳过；失败有明确退出码                                    |
+| E2-2 | `feat(asr): mlx-whisper 转写`                 | 已完成（[#15](https://github.com/IdEvEbI/teach-guard-ai/issues/15) / PR #16） | 带时间信息的原始逐字稿；默认 `large-v3-turbo`                                     |
+| E3-1 | `feat(llm): DeepSeek 分段标点（不改词）`      | 已完成（[#17](https://github.com/IdEvEbI/teach-guard-ai/issues/17) / PR #18） | 分段标点、不改词、保留时间锚与工具口述；密钥不进日志                              |
+| E3-2 | `feat(pedagogy): 六课型识别`                  | 已完成（[#19](https://github.com/IdEvEbI/teach-guard-ai/issues/19) / PR #20） | 枚举与 PRD 第 5 节一致（含 `stage_first`）；可 `--type` 覆盖；不确定为 `other`    |
+| E3-3 | `feat(review): 概念、示例、结构与建议报告`    | 已完成（[#21](https://github.com/IdEvEbI/teach-guard-ai/issues/21) / PR #23） | 合格线 / 水平线分栏；无摘句不得写必须改；**不打分**                               |
+| E3-4 | `feat(inspect): 截图、RapidOCR 与 CLI 确认`   | [#22](https://github.com/IdEvEbI/teach-guard-ai/issues/22)                    | 10 秒截图；RapidOCR 词表；确认后再出报告；确认逐字稿；`--type` 短名；默认跳过标点 |
 
 M1 做完的标志：维护者对至少两段不同课型的真实课例跑通 `inspect`，并认可报告可读。
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -30,19 +31,64 @@ def snapshot_dir(run_dir: Path) -> Path:
     return run_dir / SNAPSHOT_DIRNAME
 
 
+def clock_stem(seconds: float) -> str:
+    return format_clock(seconds).replace(":", "-")
+
+
+def parse_clock_stem(stem: str) -> int:
+    if stem.isdigit():
+        return int(stem)
+    parts = stem.replace(":", "-").split("-")
+    if len(parts) == 3 and all(part.isdigit() for part in parts):
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+    return 0
+
+
+def is_clock_named(path: Path) -> bool:
+    parts = path.stem.replace(":", "-").split("-")
+    return len(parts) == 3 and all(part.isdigit() for part in parts)
+
+
 def existing_snapshots(run_dir: Path) -> SnapshotResult | None:
     directory = snapshot_dir(run_dir)
     if not directory.is_dir():
         return None
     frames = sorted(path for path in directory.glob("*.jpg") if path.is_file() and path.stat().st_size > 0)
+    if not frames:
+        return SnapshotResult(directory=directory, frames=[], skipped=True)
+    if not all(is_clock_named(path) for path in frames):
+        return None
     return SnapshotResult(directory=directory, frames=frames, skipped=True)
 
 
+def frame_seconds(path: Path) -> int:
+    return parse_clock_stem(path.stem)
+
+
 def frame_clock(path: Path) -> str:
-    stem = path.stem
-    if stem.isdigit():
-        return format_clock(float(int(stem)))
-    return format_clock(0)
+    return format_clock(float(frame_seconds(path)))
+
+
+def file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def keep_changed_frames(tmp_frames: list[Path], directory: Path, *, interval: float) -> list[Path]:
+    """按时间命名；与上一张保留帧哈希相同则删除。"""
+    kept: list[Path] = []
+    prev_digest: str | None = None
+    for index, tmp in enumerate(tmp_frames):
+        digest = file_digest(tmp)
+        dest = directory / f"{clock_stem(index * interval)}.jpg"
+        if prev_digest is not None and digest == prev_digest:
+            tmp.unlink(missing_ok=True)
+            continue
+        if dest.exists() and dest.resolve() != tmp.resolve():
+            dest.unlink()
+        tmp.replace(dest)
+        kept.append(dest)
+        prev_digest = digest
+    return kept
 
 
 def capture_snapshots(source: Path, run_dir: Path, *, interval: float = INTERVAL_SECONDS) -> SnapshotResult:
@@ -84,9 +130,7 @@ def capture_snapshots(source: Path, run_dir: Path, *, interval: float = INTERVAL
         detail = (completed.stderr or completed.stdout or "ffmpeg 未写出截图").strip()
         raise SnapshotError(f"截图失败：{detail}")
 
-    frames: list[Path] = []
-    for index, tmp in enumerate(tmp_frames):
-        dest = directory / f"{int(index * interval):05d}.jpg"
-        tmp.replace(dest)
-        frames.append(dest)
+    frames = keep_changed_frames(tmp_frames, directory, interval=interval)
+    if not frames:
+        raise SnapshotError("截图失败：去重后没有留下任何帧。")
     return SnapshotResult(directory=directory, frames=frames, skipped=False)

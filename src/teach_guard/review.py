@@ -180,15 +180,38 @@ def _string_list(items: Any) -> list[str]:
     return [without_blackboard(str(item).strip()) for item in items if str(item).strip()]
 
 
+def _slim_confirm(confirm: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(confirm, dict):
+        return {"terms": [], "opening": {}}
+    terms = confirm.get("terms") if isinstance(confirm.get("terms"), list) else []
+    opening = confirm.get("opening") if isinstance(confirm.get("opening"), dict) else {}
+    kept: list[dict[str, str]] = []
+    for item in terms:
+        if not isinstance(item, dict):
+            continue
+        heard = str(item.get("heard") or "").strip()
+        canonical = str(item.get("canonical") or "").strip()
+        if not heard:
+            continue
+        kept.append(
+            {
+                "clock": str(item.get("clock") or "").strip(),
+                "heard": heard,
+                "canonical": canonical,
+            }
+        )
+    return {"terms": kept, "opening": dict(opening)}
+
+
 def _build_user_payload(
     *,
     source_name: str,
     type_payload: dict[str, Any],
     segments: list[dict[str, Any]],
-    screen: dict[str, Any] | None = None,
     confirm: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     lesson_type = normalize_lesson_type(str(type_payload.get("lesson_type") or ""))
+    slim = _slim_confirm(confirm)
     return {
         "filename": source_name,
         "duration": format_clock(duration_seconds(segments)),
@@ -198,9 +221,20 @@ def _build_user_payload(
         "ruler": str(type_payload.get("ruler") or "").strip(),
         "type_reasons": type_payload.get("reasons") or [],
         "transcript": compact_transcript(segments),
-        "screen": screen or {},
-        "confirm": confirm or {},
+        "confirm": slim,
     }
+
+
+def _asr_from_confirm(confirm: dict[str, Any] | None) -> list[dict[str, str]]:
+    slim = _slim_confirm(confirm)
+    suspects: list[dict[str, str]] = []
+    for item in slim["terms"]:
+        heard = item["heard"]
+        canonical = item["canonical"]
+        if not canonical or heard == canonical:
+            continue
+        suspects.append({"clock": item["clock"], "heard": heard, "likely": canonical})
+    return suspects
 
 
 def render_report_markdown(payload: dict[str, Any]) -> str:
@@ -350,7 +384,6 @@ def write_review(
     stem: str,
     *,
     source_name: str,
-    screen_json_path: Path | None = None,
     confirm_json_path: Path | None = None,
     complete: JsonComplete | None = None,
 ) -> ReviewResult:
@@ -365,14 +398,6 @@ def write_review(
     if not isinstance(type_payload, dict):
         raise ReviewError("建议报告失败：课型判定不是 JSON 对象。")
 
-    screen: dict[str, Any] | None = None
-    if screen_json_path is not None and screen_json_path.is_file():
-        try:
-            loaded = json.loads(screen_json_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            loaded = None
-        if isinstance(loaded, dict):
-            screen = loaded
     confirm: dict[str, Any] | None = None
     if confirm_json_path is not None and confirm_json_path.is_file():
         try:
@@ -389,7 +414,6 @@ def write_review(
             source_name=source_name,
             type_payload=type_payload,
             segments=segments,
-            screen=screen,
             confirm=confirm,
         ),
         ensure_ascii=False,
@@ -398,7 +422,7 @@ def write_review(
     model = llm_model()
     try:
         if complete is None:
-            raw = chat_json(system=system, user=user, timeout=REVIEW_TIMEOUT)
+            raw = chat_json(system=system, user=user, timeout=REVIEW_TIMEOUT, max_tokens=8192)
         else:
             raw = complete(system=system, user=user)
     except LlmConfigError:
@@ -433,7 +457,7 @@ def write_review(
         "nice_to_have": normalize_notes(raw.get("nice_to_have"), note_key="suggestion"),
         "playback": _string_list(raw.get("playback")),
         "concepts": normalize_notes(raw.get("concepts"), note_key="note"),
-        "asr_suspects": normalize_asr_suspects(raw.get("asr_suspects")),
+        "asr_suspects": normalize_asr_suspects(raw.get("asr_suspects")) or _asr_from_confirm(confirm),
         "model": model,
         "prompt_files": list(PROMPT_FILES),
         "prompt_version": prompt_version,

@@ -170,20 +170,24 @@ def draft_confirm(
     if not isinstance(raw, dict):
         raise ConfirmError("确认草稿失败：模型返回不是 JSON 对象。")
     terms: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
     for item in raw.get("terms") or []:
         if not isinstance(item, dict):
             continue
         heard = str(item.get("heard") or "").strip()
         if not heard:
             continue
-        terms.append(
-            {
-                "clock": str(item.get("clock") or "").strip(),
-                "heard": heard,
-                "screen": str(item.get("screen") or "").strip(),
-                "snapshot": str(item.get("snapshot") or "").strip(),
-            }
-        )
+        term = {
+            "clock": str(item.get("clock") or "").strip(),
+            "heard": heard,
+            "screen": str(item.get("screen") or "").strip(),
+            "snapshot": str(item.get("snapshot") or "").strip(),
+        }
+        key = (term["clock"], term["heard"], term["screen"])
+        if key in seen:
+            continue
+        seen.add(key)
+        terms.append(term)
     opening_needed = [str(item).strip() for item in (raw.get("opening_needed") or []) if str(item).strip()]
     return {"terms": terms, "opening_needed": opening_needed, "prompt_version": prompt_version}
 
@@ -195,7 +199,7 @@ def _ask_term(item: dict[str, str], ask: AskFn) -> dict[str, str]:
     snapshot = f" 截图 {item['snapshot']}" if item.get("snapshot") else ""
     prompt = (
         f"[{item.get('clock') or '？'}] 稿上是「{item['heard']}」。{hint}{snapshot}。\n"
-        f"确认后的写法（直接回车则用「{default}」）："
+        f"确认后的写法（直接回车则用「{default}」）"
     )
     answer = ask(prompt).strip() or default
     return {
@@ -212,7 +216,7 @@ def _ask_opening(field_key: str, label: str, ask: AskFn) -> str:
         "1. 确实没有，需要补（合格线）\n"
         "2. 老师已带过前一阶段，用短话术即可\n"
         "3. 有，但这段录像没截到\n"
-        "请输入 1 / 2 / 3："
+        "请输入 1 / 2 / 3"
     )
     while True:
         answer = ask(prompt).strip() or "1"

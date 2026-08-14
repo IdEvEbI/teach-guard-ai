@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from teach_guard.confirm import apply_confirm_answers, render_confirm_markdown
+from teach_guard.confirm import apply_confirm_answers, draft_confirm, render_confirm_markdown
 
 
 def test_apply_confirm_auto_prefers_screen() -> None:
@@ -13,7 +13,7 @@ def test_apply_confirm_auto_prefers_screen() -> None:
                     "clock": "00:10:10",
                     "heard": "CRT决策数",
                     "screen": "CART决策树",
-                    "snapshot": "snapshot/00600.jpg",
+                    "snapshot": "snapshot/00-10-10.jpg",
                 }
             ],
             "opening_needed": ["self_intro", "class_norms", "today_goal"],
@@ -24,6 +24,60 @@ def test_apply_confirm_auto_prefers_screen() -> None:
     assert answers["terms"][0]["canonical"] == "CART决策树"
     assert answers["opening"]["self_intro"] == "missing_must_fix"
     assert answers["opening"]["today_goal"] == "missing_must_fix"
+
+
+def test_apply_confirm_empty_enter_uses_screen() -> None:
+    def ask(_prompt: str) -> str:
+        return ""
+
+    answers = apply_confirm_answers(
+        {
+            "terms": [
+                {
+                    "clock": "00:10:10",
+                    "heard": "CRT决策数",
+                    "screen": "CART决策树",
+                    "snapshot": "snapshot/00-10-10.jpg",
+                }
+            ],
+            "opening_needed": [],
+        },
+        lesson_type="practice",
+        auto=False,
+        ask=ask,
+    )
+    assert answers["terms"][0]["canonical"] == "CART决策树"
+
+
+def test_draft_confirm_dedupes_same_term() -> None:
+    def complete(*, system: str, user: str) -> dict:
+        del system, user
+        return {
+            "terms": [
+                {
+                    "clock": "00:10:10",
+                    "heard": "CRT决策数",
+                    "screen": "CART决策树",
+                    "snapshot": "snapshot/00-10-10.jpg",
+                },
+                {
+                    "clock": "00:10:10",
+                    "heard": "CRT决策数",
+                    "screen": "CART决策树",
+                    "snapshot": "snapshot/00-10-10.jpg",
+                },
+            ],
+            "opening_needed": [],
+        }
+
+    draft = draft_confirm(
+        source_name="clip.avi",
+        lesson_type="stage_first",
+        segments=[],
+        screen=None,
+        complete=complete,
+    )
+    assert len(draft["terms"]) == 1
 
 
 def test_apply_confirm_ask_opening_choice() -> None:

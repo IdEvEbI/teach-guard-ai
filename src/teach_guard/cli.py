@@ -38,6 +38,7 @@ from teach_guard.lesson_type import (
     parse_cli_lesson_type,
 )
 from teach_guard.review import EXIT_REVIEW_FAILED, ReviewError, write_review
+from teach_guard.checked import EXIT_CHECKED_FAILED, CheckedError, write_checked
 from teach_guard.confirm import (
     EXIT_CONFIRM_FAILED,
     ConfirmError,
@@ -66,14 +67,6 @@ from teach_guard.snapshot import (
     capture_snapshots,
     existing_snapshots,
 )
-from teach_guard.llm import EXIT_LLM_CONFIG, LlmConfigError, llm_api_key
-from teach_guard.paths import DEFAULT_INPUT_DIR, DEFAULT_OUTPUT_DIR, get_output_dir, resolve_input_file
-from teach_guard.punctuate import (
-    EXIT_PUNCTUATE_FAILED,
-    PunctuateError,
-    load_punctuate_if_present,
-    punctuate_transcript,
-)
 from teach_guard.transcribe import (
     EXIT_ASR_MISSING,
     EXIT_TRANSCRIBE_FAILED,
@@ -84,6 +77,11 @@ from teach_guard.transcribe import (
 )
 
 load_dotenv()
+
+
+def _ask_line(text: str) -> str:
+    return str(typer.prompt(text, default="", show_default=False, prompt_suffix=""))
+
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -321,7 +319,9 @@ def inspect(
         else:
             typer.echo(f"已写出截图：{shots.directory}（{len(shots.frames)} 张）")
 
-    existing_screen = load_screen_if_present(run_dir, stem) if prep.reused else None
+    existing_screen = (
+        load_screen_if_present(run_dir, stem) if prep.reused and existing_shots is not None else None
+    )
     if existing_screen is not None:
         screen = existing_screen
         set_artifact(run_dir, "screen_md", screen.markdown_path)
@@ -378,7 +378,7 @@ def inspect(
         mark_step(run_dir, "lesson_type", "done")
         typer.echo(f"已写出课型判定：{typed.markdown_path}（`{typed.lesson_type}`）")
 
-    existing_confirm = load_confirm_if_present(run_dir, stem) if prep.reused and yes else None
+    existing_confirm = load_confirm_if_present(run_dir, stem) if prep.reused else None
     if existing_confirm is not None:
         confirmed = existing_confirm
         set_artifact(run_dir, "confirm_md", confirmed.markdown_path)
@@ -399,7 +399,7 @@ def inspect(
                 segments=list(segments),
                 screen=screen_payload if isinstance(screen_payload, dict) else None,
                 auto=yes,
-                ask=None if yes else typer.prompt,
+                ask=None if yes else _ask_line,
             )
         except LlmConfigError as exc:
             mark_step(run_dir, "confirm", "failed", error=str(exc))
@@ -415,15 +415,26 @@ def inspect(
         mark_step(run_dir, "confirm", "done")
         typer.echo(f"已写出确认记录：{confirmed.markdown_path}")
 
+    typer.echo("正在按确认记录写出确认逐字稿…")
+    try:
+        checked = write_checked(transcript.json_path, confirmed.json_path, run_dir, stem)
+    except CheckedError as exc:
+        mark_step(run_dir, "checked", "failed", error=str(exc))
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=EXIT_CHECKED_FAILED) from exc
+    set_artifact(run_dir, "transcript_checked_md", checked.markdown_path)
+    set_artifact(run_dir, "transcript_checked_json", checked.json_path)
+    mark_step(run_dir, "checked", "done")
+    typer.echo(f"已写出确认逐字稿：{checked.markdown_path}（替换 {checked.applied_count} 处）")
+
     typer.echo("正在写建议报告…")
     try:
         reviewed = write_review(
-            transcript.json_path,
+            checked.json_path,
             typed.json_path,
             run_dir,
             stem,
             source_name=resolved.name,
-            screen_json_path=screen.json_path,
             confirm_json_path=confirmed.json_path,
         )
     except LlmConfigError as exc:

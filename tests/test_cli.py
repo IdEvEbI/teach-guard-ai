@@ -82,10 +82,12 @@ def test_inspect_writes_manifest(tmp_path: Path) -> None:
     assert steps["screen_ocr"] == "done"
     assert steps["lesson_type"] == "done"
     assert steps["confirm"] == "done"
+    assert steps["checked"] == "done"
     assert steps["review"] == "done"
     assert "transcript_punct_md" not in data["artifacts"]
     assert "screen_md" in data["artifacts"]
     assert "confirm_md" in data["artifacts"]
+    assert "transcript_checked_md" in data["artifacts"]
     assert "report_md" in data["artifacts"]
     assert data["models"]["llm"]["status"] == "not_run" or data["models"]["llm"]["status"] == "done"
     assert data["prompts"]["versions"].get("review") == "stub"
@@ -164,6 +166,7 @@ def test_inspect_skips_extract_and_transcribe_when_reused(tmp_path: Path, monkey
     assert steps["screen_ocr"] == "skipped"
     assert steps["snapshot"] == "skipped"
     assert steps["confirm"] == "skipped"
+    assert steps["checked"] == "done"
     assert steps["review"] == "done"
 
 

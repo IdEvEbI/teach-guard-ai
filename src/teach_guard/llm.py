@@ -61,7 +61,32 @@ def _friendly_llm_error(exc: BaseException) -> str:
     return f"调用大模型失败：{detail}"
 
 
-def chat_json(*, system: str, user: str, timeout: float = 120.0) -> dict[str, Any]:
+def _create_json_completion(client: Any, *, system: str, user: str, max_tokens: int) -> Any:
+    payload = {
+        "model": llm_model(),
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    try:
+        return client.chat.completions.create(
+            **payload,
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+    except TypeError:
+        return client.chat.completions.create(**payload)
+    except Exception as exc:
+        detail = str(exc).lower()
+        if "thinking" in detail or "extra_body" in detail:
+            return client.chat.completions.create(**payload)
+        raise
+
+
+def chat_json(*, system: str, user: str, timeout: float = 120.0, max_tokens: int = 4096) -> dict[str, Any]:
     """发送 system + user，解析模型返回的 JSON 对象。"""
     api_key = require_api_key()
     try:
@@ -71,23 +96,19 @@ def chat_json(*, system: str, user: str, timeout: float = 120.0) -> dict[str, An
 
     client = OpenAI(api_key=api_key, base_url=llm_base_url(), timeout=timeout)
     try:
-        response = client.chat.completions.create(
-            model=llm_model(),
-            temperature=0,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
+        response = _create_json_completion(client, system=system, user=user, max_tokens=max_tokens)
+        content = (response.choices[0].message.content or "").strip()
+        if not content:
+            response = _create_json_completion(client, system=system, user=user, max_tokens=max_tokens)
+            content = (response.choices[0].message.content or "").strip()
     except LlmConfigError:
         raise
     except Exception as exc:  # noqa: BLE001 — 转成不带密钥的中文错误
         raise RuntimeError(_friendly_llm_error(exc)) from exc
 
-    content = (response.choices[0].message.content or "").strip()
     if not content:
-        raise RuntimeError("调用大模型失败：返回内容为空。")
+        reason = getattr(response.choices[0], "finish_reason", None) or "unknown"
+        raise RuntimeError(f"调用大模型失败：返回内容为空（finish_reason={reason}）。")
     try:
         parsed = json.loads(_strip_fences(content))
     except json.JSONDecodeError as exc:

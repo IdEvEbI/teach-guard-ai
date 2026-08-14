@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from teach_guard.snapshot import INTERVAL_SECONDS, frame_clock
+from teach_guard.snapshot import INTERVAL_SECONDS, frame_clock, frame_seconds
 from teach_guard.transcribe import format_clock
 
 EXIT_OCR_MISSING = 11
@@ -152,7 +152,7 @@ def ocr_snapshots(
             unique.append(
                 {
                     "clock": frame_clock(path),
-                    "seconds": int(path.stem) if path.stem.isdigit() else 0,
+                    "seconds": frame_seconds(path),
                     "file": f"snapshot/{path.name}",
                     "texts": texts,
                 }

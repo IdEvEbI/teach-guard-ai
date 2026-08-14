@@ -25,6 +25,7 @@ PIPELINE_STEPS = (
     "screen_ocr",
     "lesson_type",
     "confirm",
+    "checked",
     "review",
 )
 
