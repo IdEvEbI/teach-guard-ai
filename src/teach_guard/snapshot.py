@@ -12,6 +12,7 @@ from teach_guard.extract import FfmpegMissingError, classify_media
 from teach_guard.transcribe import format_clock
 
 SNAPSHOT_DIRNAME = "snapshot"
+DUPLICATE_DIRNAME = "duplicate"
 INTERVAL_SECONDS = 10.0
 EXIT_SNAPSHOT_FAILED = 10
 
@@ -29,6 +30,21 @@ class SnapshotResult:
 
 def snapshot_dir(run_dir: Path) -> Path:
     return run_dir / SNAPSHOT_DIRNAME
+
+
+def duplicate_dir(run_dir: Path) -> Path:
+    return snapshot_dir(run_dir) / DUPLICATE_DIRNAME
+
+
+def move_to_duplicate(path: Path, run_dir: Path) -> Path:
+    dest_dir = duplicate_dir(run_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / path.name
+    if dest.exists() and dest.resolve() != path.resolve():
+        dest.unlink()
+    if path.exists() and path.resolve() != dest.resolve():
+        path.replace(dest)
+    return dest
 
 
 def clock_stem(seconds: float) -> str:
@@ -104,6 +120,10 @@ def capture_snapshots(source: Path, run_dir: Path, *, interval: float = INTERVAL
     directory.mkdir(parents=True, exist_ok=True)
     for leftover in directory.glob("*.jpg"):
         leftover.unlink()
+    dup = directory / DUPLICATE_DIRNAME
+    if dup.is_dir():
+        for leftover in dup.glob("*.jpg"):
+            leftover.unlink()
 
     pattern = directory / "tmp_%05d.jpg"
     completed = subprocess.run(

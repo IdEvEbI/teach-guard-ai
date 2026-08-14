@@ -11,6 +11,7 @@ from teach_guard.review import (
     normalize_conduct,
     render_report_markdown,
     rewrite_coverage,
+    screen_hold_notes,
     without_blackboard,
     write_review,
 )
@@ -187,7 +188,7 @@ def test_render_report_splits_must_and_nice() -> None:
     assert "## 合格线（必须改）" in markdown
     assert "（设计）阶段末成果只停留在口头" in markdown
     assert "### 阶段末成果只停留在口头" not in markdown
-    assert "## 水平线（锦上添花）" in markdown
+    assert "## 水平线（参考调整）" in markdown
     assert "提问与留白" in markdown
     assert "对照录像" in markdown
     assert "不判断课堂上有没有形成问答" in markdown
@@ -202,6 +203,7 @@ def test_render_report_splits_must_and_nice() -> None:
     assert "1. 低俗用语：" in markdown
     assert "### 低俗用语" not in markdown
     assert "这破课有什么用" in markdown
+    assert "2. 贬低或侮辱学员：本段逐字稿上未发现这类话术。" in markdown
     assert "贬低或侮辱学员" in markdown
     assert "贬低前面授课老师" in markdown
     assert markdown.count("本段逐字稿上未发现这类话术") == 3
@@ -328,6 +330,42 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
     assert "只覆盖「学什么」" in markdown
     assert "言行底线" in markdown
     assert "这课就是骗钱的" in markdown
+    assert "3. 贬低学科或课程：" in markdown
+    assert "### 贬低学科或课程" not in markdown
     assert "无摘句应丢弃" not in markdown
     assert data["conduct"]["vulgar"] == []
     assert data["conduct"]["disparage_course"][0]["quote"] == "这课就是骗钱的"
+
+
+def test_screen_hold_notes_from_existing_frames(tmp_path: Path) -> None:
+    (tmp_path / "clip.screen.json").write_text(
+        json.dumps(
+            {
+                "engine": "rapidocr",
+                "frames": [
+                    {
+                        "clock": "00:02:10",
+                        "seconds": 130,
+                        "texts": ["机器学习算法分类：", "文件(F)", "08:42"],
+                    },
+                    {
+                        "clock": "00:02:20",
+                        "seconds": 140,
+                        "texts": ["机器学习算法分类：", "文件(F)", "08:43"],
+                    },
+                    {
+                        "clock": "00:06:50",
+                        "seconds": 410,
+                        "texts": ["有监督算法"],
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    notes = screen_hold_notes(tmp_path, "clip", last_seconds=410)
+    assert notes[0]["item"] == "长时间画面静止"
+    assert notes[0]["clock"] == "00:02:10"
+    assert "00:06:50" in notes[0]["note"]
+    assert "下一节点" in notes[0]["note"]
