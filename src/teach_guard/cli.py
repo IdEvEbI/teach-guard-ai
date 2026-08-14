@@ -358,6 +358,10 @@ def inspect(
         set_artifact(run_dir, "screen_json", screen.json_path)
         mark_step(run_dir, "screen_ocr", "done")
         typer.echo(f"已写出画面词表：{screen.markdown_path}（{screen.frame_count} 帧）")
+        if screen.duplicate_count:
+            typer.echo(
+                f"主体未变的截图已移到 {shots.directory / 'duplicate'}（{screen.duplicate_count} 张），可人工核对。"
+            )
 
     existing_type = load_type_if_present(run_dir, stem) if prep.reused and override is None else None
     if existing_type is not None:
@@ -401,22 +405,15 @@ def inspect(
         mark_step(run_dir, "confirm", "skipped")
         typer.echo(f"已有确认记录，跳过提问：{confirmed.markdown_path}")
     else:
-        if yes:
-            typer.echo("正在准备确认项…")
-        elif accept_screen:
-            typer.echo("画面已有对应词的条目将自动采用；其余项请确认…")
-        else:
-            typer.echo("请逐条确认（稿上用词与开场三项）…")
+        typer.echo("正在准备确认项…" if yes else "请逐条确认（开场三项）…")
         try:
             segments = json.loads(transcript.json_path.read_text(encoding="utf-8")).get("segments") or []
-            screen_payload = json.loads(screen.json_path.read_text(encoding="utf-8"))
             confirmed = write_confirm(
                 run_dir,
                 stem,
                 source_name=resolved.name,
                 lesson_type=typed.lesson_type,
                 segments=list(segments),
-                screen=screen_payload if isinstance(screen_payload, dict) else None,
                 auto=yes,
                 ask=None if yes else _ask_line,
                 accept_screen=accept_screen and not yes,

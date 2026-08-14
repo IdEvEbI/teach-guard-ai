@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from teach_guard.snapshot import INTERVAL_SECONDS, frame_clock, frame_seconds
+from teach_guard.screen_content import content_holds, content_tokens, same_content
+from teach_guard.snapshot import INTERVAL_SECONDS, frame_clock, frame_seconds, move_to_duplicate
 from teach_guard.transcribe import format_clock
 
 EXIT_OCR_MISSING = 11
@@ -33,6 +34,7 @@ class ScreenOcrResult:
     markdown_path: Path
     frame_count: int
     engine: str
+    duplicate_count: int = 0
 
 
 def load_screen_if_present(run_dir: Path, stem: str) -> ScreenOcrResult | None:
@@ -111,10 +113,25 @@ def render_screen_markdown(payload: dict[str, Any]) -> str:
         f"- 间隔：{payload.get('interval_seconds') or INTERVAL_SECONDS} 秒",
         f"- 帧数：{len(payload.get('frames') or [])}",
         "",
-        "本文件只记录共屏上认出的字，不改逐字稿，不是评课。",
+        "本文件只记录共屏上认出的字，不改逐字稿，不是评课。词表按主体词去重：菜单、时钟、输入法候选不参与比较。主体未变的截图在 `snapshot/duplicate/`，供人工核对。",
         "",
     ]
+    holds = payload.get("content_holds") if isinstance(payload.get("content_holds"), list) else []
+    if holds:
+        lines.append("## 长时间画面静止")
+        lines.append("")
+        for item in holds:
+            if not isinstance(item, dict):
+                continue
+            start = str(item.get("start") or "").strip()
+            end = str(item.get("end") or "").strip()
+            seconds = int(item.get("seconds") or 0)
+            lines.append(f"- {start} – {end}（{seconds} 秒）")
+        lines.append("")
     frames = payload.get("frames") if isinstance(payload.get("frames"), list) else []
+    if frames:
+        lines.append("## 帧")
+        lines.append("")
     if not frames:
         lines.append("（无截图或输入已是音频。）")
         lines.append("")
@@ -141,14 +158,28 @@ def ocr_snapshots(
 ) -> ScreenOcrResult:
     reader = engine or _rapidocr_engine
     unique: list[dict[str, Any]] = []
-    seen: str | None = None
+    duplicate_count = 0
+    previous_tokens: frozenset[str] | None = None
+    previous_empty_key: str | None = None
+    last_seconds = frame_seconds(frames[-1]) if frames else 0
     try:
         for path in frames:
             texts = reader(path)
-            fingerprint = " | ".join(texts) or _fingerprint(path)
-            if fingerprint == seen:
+            tokens = content_tokens(texts)
+            empty_key = "" if tokens else (_fingerprint(path))
+            skip = False
+            if previous_tokens is not None and tokens and same_content(previous_tokens, tokens):
+                skip = True
+            elif previous_tokens is not None and previous_tokens and not tokens:
+                skip = True
+            elif previous_tokens is not None and not tokens and not previous_tokens and empty_key == previous_empty_key:
+                skip = True
+            if skip:
+                move_to_duplicate(path, run_dir)
+                duplicate_count += 1
                 continue
-            seen = fingerprint
+            previous_tokens = tokens
+            previous_empty_key = empty_key
             unique.append(
                 {
                     "clock": frame_clock(path),
@@ -163,11 +194,13 @@ def ocr_snapshots(
         detail = str(exc).strip() or exc.__class__.__name__
         raise OcrError(detail if "失败" in detail else f"画面识别失败：{detail}") from exc
 
+    holds = content_holds(unique, last_seconds=last_seconds)
     payload = {
         "engine": "rapidocr",
         "interval_seconds": interval,
         "frames": unique,
-        "duration": format_clock(float(unique[-1]["seconds"])) if unique else "00:00:00",
+        "content_holds": holds,
+        "duration": format_clock(float(last_seconds)) if frames else "00:00:00",
     }
     json_path = run_dir / f"{stem}.screen.json"
     markdown_path = run_dir / f"{stem}.screen.md"
@@ -178,4 +211,5 @@ def ocr_snapshots(
         markdown_path=markdown_path,
         frame_count=len(unique),
         engine="rapidocr",
+        duplicate_count=duplicate_count,
     )

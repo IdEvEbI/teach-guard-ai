@@ -134,27 +134,11 @@ def render_confirm_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _screen_excerpt(screen: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not isinstance(screen, dict):
-        return []
-    frames = screen.get("frames") if isinstance(screen.get("frames"), list) else []
-    excerpt: list[dict[str, Any]] = []
-    for item in frames:
-        if not isinstance(item, dict):
-            continue
-        texts = [str(text).strip() for text in (item.get("texts") or []) if str(text).strip()]
-        if not texts:
-            continue
-        excerpt.append({"clock": item.get("clock"), "file": item.get("file"), "texts": texts[:12]})
-    return excerpt
-
-
 def draft_confirm(
     *,
     source_name: str,
     lesson_type: str,
     segments: list[dict[str, Any]],
-    screen: dict[str, Any] | None,
     complete: JsonComplete | None = None,
 ) -> dict[str, Any]:
     system, prompt_version = load_confirm_prompt()
@@ -164,7 +148,6 @@ def draft_confirm(
             "lesson_type": lesson_type,
             "duration": format_clock(duration_seconds(segments)),
             "transcript": compact_transcript(segments),
-            "screen": _screen_excerpt(screen),
         },
         ensure_ascii=False,
         indent=2,
@@ -179,9 +162,8 @@ def draft_confirm(
         raise ConfirmError(detail if "失败" in detail else f"确认草稿失败：{detail}") from exc
     if not isinstance(raw, dict):
         raise ConfirmError("确认草稿失败：模型返回不是 JSON 对象。")
-    terms = normalize_confirm_terms(raw.get("terms") or [])
     opening_needed = [str(item).strip() for item in (raw.get("opening_needed") or []) if str(item).strip()]
-    return {"terms": terms, "opening_needed": opening_needed, "prompt_version": prompt_version}
+    return {"terms": [], "opening_needed": opening_needed, "prompt_version": prompt_version}
 
 
 def normalize_confirm_terms(items: object) -> list[dict[str, str]]:
@@ -312,7 +294,6 @@ def write_confirm(
     source_name: str,
     lesson_type: str,
     segments: list[dict[str, Any]],
-    screen: dict[str, Any] | None,
     auto: bool,
     ask: AskFn | None = None,
     accept_screen: bool = False,
@@ -323,7 +304,6 @@ def write_confirm(
         source_name=source_name,
         lesson_type=lesson_type,
         segments=segments,
-        screen=screen,
         complete=complete,
     )
     answers = apply_confirm_answers(

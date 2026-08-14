@@ -13,6 +13,7 @@ from teach_guard.lesson_type import TYPE_LABELS, normalize_lesson_type
 from teach_guard.llm import LlmConfigError, chat_json, llm_model
 from teach_guard.punctuate import prompts_dir
 from teach_guard.questions import build_questions_payload, wait_seconds_threshold
+from teach_guard.screen_content import content_holds, hold_notes
 from teach_guard.transcribe import format_clock
 
 PROMPT_FILES = (
@@ -487,7 +488,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     else:
         lines.append("本段稿上没有足以写成必须改的摘句。")
         lines.append("")
-    lines.extend(["## 水平线（锦上添花）", ""])
+    lines.extend(["## 水平线（参考调整）", ""])
     nice = payload.get("nice_to_have") if isinstance(payload.get("nice_to_have"), list) else []
     if nice:
         for item in nice:
@@ -650,6 +651,24 @@ def _wait_seconds_label(wait: Any) -> str:
     return str(wait)
 
 
+def screen_hold_notes(run_dir: Path, stem: str, *, last_seconds: int) -> list[dict[str, str]]:
+    path = run_dir / f"{stem}.screen.json"
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    frames = payload.get("frames") if isinstance(payload.get("frames"), list) else []
+    holds = content_holds(
+        [item for item in frames if isinstance(item, dict)],
+        last_seconds=last_seconds,
+    )
+    return hold_notes(holds)
+
+
 def write_review(
     transcript_json_path: Path,
     type_json_path: Path,
@@ -737,7 +756,8 @@ def write_review(
             ),
         },
         "must_fix": keep_cited(raw.get("must_fix")),
-        "nice_to_have": normalize_notes(raw.get("nice_to_have"), note_key="suggestion"),
+        "nice_to_have": normalize_notes(raw.get("nice_to_have"), note_key="suggestion")
+        + screen_hold_notes(run_dir, stem, last_seconds=int(duration_seconds(segments))),
         "concepts": normalize_notes(raw.get("concepts"), note_key="note"),
         "questions": build_questions_payload(segments, raw, threshold=threshold),
         "conduct": normalize_conduct(raw.get("conduct")),

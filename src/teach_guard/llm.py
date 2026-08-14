@@ -112,6 +112,9 @@ def chat_json(*, system: str, user: str, timeout: float = 120.0, max_tokens: int
     try:
         parsed = json.loads(_strip_fences(content))
     except json.JSONDecodeError as exc:
+        reason = getattr(response.choices[0], "finish_reason", None) or "unknown"
+        if reason == "length":
+            raise RuntimeError("调用大模型失败：返回内容不是合法 JSON（输出达到长度上限被截断）。") from exc
         raise RuntimeError("调用大模型失败：返回内容不是合法 JSON。") from exc
     if not isinstance(parsed, dict):
         raise RuntimeError("调用大模型失败：返回内容不是 JSON 对象。")
