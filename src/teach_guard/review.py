@@ -1,4 +1,4 @@
-"""单视频精查报告：现场结构、概念观察、合格线 / 水平线 / 待回放。不打分。"""
+"""单视频精查报告：现场结构、概念观察、合格线 / 水平线、言行底线、提问与留白。不打分。"""
 
 from __future__ import annotations
 
@@ -12,12 +12,14 @@ from typing import Any
 from teach_guard.lesson_type import TYPE_LABELS, normalize_lesson_type
 from teach_guard.llm import LlmConfigError, chat_json, llm_model
 from teach_guard.punctuate import prompts_dir
+from teach_guard.questions import build_questions_payload, wait_seconds_threshold
 from teach_guard.transcribe import format_clock
 
 PROMPT_FILES = (
     "system_tone.md",
     "knowledge_cases.md",
     "structure_single.md",
+    "conduct.md",
     "coach_feedback.md",
 )
 EXIT_REVIEW_FAILED = 9
@@ -88,6 +90,115 @@ def without_blackboard(text: str) -> str:
     return text.replace("板书", "共屏")
 
 
+INTERNAL_JARGON = (
+    "confirm.opening",
+    "confirm.terms",
+    "prior_stage_short",
+    "missing_must_fix",
+    "not_in_this_recording",
+    "wait_seconds",
+)
+
+CONDUCT_CATEGORIES = (
+    ("vulgar", "低俗用语"),
+    ("disparage_student", "贬低或侮辱学员"),
+    ("disparage_course", "贬低学科或课程"),
+    ("disparage_teacher", "贬低前面授课老师"),
+)
+
+OPENING_LABELS = {
+    "self_intro": "自我介绍",
+    "class_norms": "班级约定",
+    "today_goal": "今日目标",
+}
+
+OPENING_SHARED = {
+    "prior_stage_short": "{names}已带过前一阶段，本段用短话术收束即可",
+    "missing_must_fix": "{names}当天没有，需要补",
+    "not_in_this_recording": "{names}这段录像没有拍到",
+}
+
+TODAY_GOAL_COVERAGE = {
+    "prior_stage_short": "今日目标可用短话术点明",
+    "missing_must_fix": "今日目标当天没有，需要补",
+    "not_in_this_recording": "今日目标这段录像没有拍到",
+}
+
+
+def strip_internal_jargon(text: str) -> str:
+    """报告给人读，去掉内部字段名和代号。"""
+    kept: list[str] = []
+    chunk = ""
+    for char in without_blackboard(text):
+        chunk += char
+        if char in "。！？":
+            piece = chunk.strip()
+            if piece and not any(token in piece for token in INTERNAL_JARGON):
+                kept.append(piece)
+            chunk = ""
+    tail = chunk.strip()
+    if tail and not any(token in tail for token in INTERNAL_JARGON):
+        kept.append(tail)
+    return "".join(kept)
+
+
+def rewrite_coverage(
+    *,
+    lesson_type: str,
+    opening: dict[str, Any] | None,
+    model_coverage: str,
+) -> str:
+    cleaned = strip_internal_jargon(model_coverage)
+    if lesson_type != "stage_first":
+        return cleaned
+    cleaned = _drop_opening_sentences(cleaned)
+    if not cleaned:
+        cleaned = "本段覆盖了阶段第一课开场的「学什么」。"
+    elif not cleaned.endswith(("。", "！", "？")):
+        cleaned += "。"
+    bits = _opening_coverage_bits(opening if isinstance(opening, dict) else {})
+    if not bits:
+        return cleaned
+    return cleaned + "；".join(bits) + "。"
+
+
+def _drop_opening_sentences(text: str) -> str:
+    """开场三项以确认为准，去掉模型自己写的自我介绍 / 班级约定 / 今日目标句，避免重复。"""
+    markers = ("自我介绍", "班级约定", "今日目标")
+    kept: list[str] = []
+    chunk = ""
+    for char in text:
+        chunk += char
+        if char in "。！？":
+            piece = chunk.strip()
+            if piece and not any(marker in piece for marker in markers):
+                kept.append(piece)
+            chunk = ""
+    tail = chunk.strip()
+    if tail and not any(marker in tail for marker in markers):
+        kept.append(tail)
+    return "".join(kept)
+
+
+def _opening_coverage_bits(opening: dict[str, Any]) -> list[str]:
+    bits: list[str] = []
+    intro = str(opening.get("self_intro") or "").strip()
+    norms = str(opening.get("class_norms") or "").strip()
+    if intro and intro == norms and intro in OPENING_SHARED:
+        bits.append(OPENING_SHARED[intro].format(names="自我介绍和班级约定"))
+    else:
+        for key in ("self_intro", "class_norms"):
+            choice = str(opening.get(key) or "").strip()
+            template = OPENING_SHARED.get(choice)
+            if template:
+                bits.append(template.format(names=OPENING_LABELS[key]))
+    goal = str(opening.get("today_goal") or "").strip()
+    phrase = TODAY_GOAL_COVERAGE.get(goal)
+    if phrase:
+        bits.append(phrase)
+    return bits
+
+
 def keep_cited(items: Any, *, fix_key: str = "fix") -> list[dict[str, str]]:
     """合格线必须同时有条目、时间锚和摘句。"""
     kept: list[dict[str, str]] = []
@@ -112,6 +223,34 @@ def keep_cited(items: Any, *, fix_key: str = "fix") -> list[dict[str, str]]:
     return kept
 
 
+def keep_cited_quotes(items: Any, *, title: str) -> list[dict[str, str]]:
+    """言行底线必须有时间锚和摘句；类别名由程序写入。"""
+    kept: list[dict[str, str]] = []
+    if not isinstance(items, list):
+        return kept
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        clock = str(item.get("clock") or "").strip()
+        quote = str(item.get("quote") or "").strip()
+        if not clock or not quote:
+            continue
+        kept.append(
+            {
+                "item": title,
+                "clock": clock,
+                "quote": quote,
+                "fix": without_blackboard(str(item.get("fix") or item.get("suggestion") or "").strip()),
+            }
+        )
+    return kept
+
+
+def normalize_conduct(raw: Any) -> dict[str, list[dict[str, str]]]:
+    data = raw if isinstance(raw, dict) else {}
+    return {key: keep_cited_quotes(data.get(key), title=label) for key, label in CONDUCT_CATEGORIES}
+
+
 def normalize_notes(items: Any, *, note_key: str) -> list[dict[str, str]]:
     notes: list[dict[str, str]] = []
     if not isinstance(items, list):
@@ -131,26 +270,6 @@ def normalize_notes(items: Any, *, note_key: str) -> list[dict[str, str]]:
             }
         )
     return notes
-
-
-def normalize_asr_suspects(items: Any) -> list[dict[str, str]]:
-    suspects: list[dict[str, str]] = []
-    if not isinstance(items, list):
-        return suspects
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        heard = str(item.get("heard") or "").strip()
-        if not heard:
-            continue
-        suspects.append(
-            {
-                "clock": str(item.get("clock") or "").strip(),
-                "heard": heard,
-                "likely": str(item.get("likely") or "").strip(),
-            }
-        )
-    return suspects
 
 
 def normalize_modules(items: Any) -> list[dict[str, str]]:
@@ -209,6 +328,7 @@ def _build_user_payload(
     type_payload: dict[str, Any],
     segments: list[dict[str, Any]],
     confirm: dict[str, Any] | None = None,
+    wait_seconds: float = 2.0,
 ) -> dict[str, Any]:
     lesson_type = normalize_lesson_type(str(type_payload.get("lesson_type") or ""))
     slim = _slim_confirm(confirm)
@@ -222,19 +342,8 @@ def _build_user_payload(
         "type_reasons": type_payload.get("reasons") or [],
         "transcript": compact_transcript(segments),
         "confirm": slim,
+        "wait_seconds": wait_seconds,
     }
-
-
-def _asr_from_confirm(confirm: dict[str, Any] | None) -> list[dict[str, str]]:
-    slim = _slim_confirm(confirm)
-    suspects: list[dict[str, str]] = []
-    for item in slim["terms"]:
-        heard = item["heard"]
-        canonical = item["canonical"]
-        if not canonical or heard == canonical:
-            continue
-        suspects.append({"clock": item["clock"], "heard": heard, "likely": canonical})
-    return suspects
 
 
 def render_report_markdown(payload: dict[str, Any]) -> str:
@@ -323,16 +432,92 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     else:
         lines.append("- （无。）")
         lines.append("")
-    lines.extend(["## 待回放确认", ""])
-    playback = payload.get("playback") if isinstance(payload.get("playback"), list) else []
-    if playback:
-        for item in playback:
-            text = str(item).strip()
-            if text:
-                lines.append(f"- {text}")
-    else:
-        lines.append("- （无。）")
+    lines.extend(["## 言行底线", ""])
+    lines.append(
+        "所有课型都检查下面四类话术：低俗用语、贬低或侮辱学员、嫌弃本学科或本课程、嫌弃前面授课老师。"
+        "只依据逐字稿原句。没有摘句就不写成必须改。"
+    )
     lines.append("")
+    conduct = payload.get("conduct") if isinstance(payload.get("conduct"), dict) else {}
+    for key, label in CONDUCT_CATEGORIES:
+        raw_items = conduct.get(key) if isinstance(conduct, dict) else []
+        items = raw_items if isinstance(raw_items, list) else []
+        cited = [
+            item
+            for item in items
+            if isinstance(item, dict) and str(item.get("clock") or "").strip() and str(item.get("quote") or "").strip()
+        ]
+        lines.append(f"### {label}")
+        lines.append("")
+        if cited:
+            for item in cited:
+                lines.append(f"- 摘句：[{item.get('clock')}] {item.get('quote')}")
+                fix = str(item.get("fix") or "").strip()
+                if fix:
+                    lines.append(f"  改法：{fix}")
+            lines.append("")
+        else:
+            lines.append("本段逐字稿上未发现这类话术。")
+            lines.append("")
+    questions = payload.get("questions") if isinstance(payload.get("questions"), dict) else {}
+    lines.extend(["## 提问与留白", ""])
+    wait = questions.get("wait_seconds") if isinstance(questions, dict) else None
+    duration = str((questions or {}).get("duration") or payload.get("duration") or "").strip()
+    wait_label = _wait_seconds_label(wait)
+    lines.append(
+        f"本段时长 {duration or '（未知）'}。"
+        "下面只列出老师发出的提问，方便对照录像。"
+        f"提问之后停顿达到 {wait_label} 秒，记为给学员留出了回答时间。"
+        "在共屏上写字、画图造成的停顿不算。"
+        "录音里通常听不清学员回答，因此不判断课堂上有没有形成问答。"
+    )
+    lines.append("")
+    specific = questions.get("specific") if isinstance(questions, dict) else []
+    specific_count = questions.get("specific_count") if isinstance(questions, dict) else None
+    lines.append(f"### 具体提问（{specific_count if specific_count is not None else len(specific or [])} 次）")
+    lines.append("")
+    if isinstance(specific, list) and specific:
+        for item in specific:
+            if not isinstance(item, dict):
+                continue
+            quote = str(item.get("quote") or "").strip()
+            clock = str(item.get("clock") or "").strip()
+            if not quote:
+                continue
+            waited = bool(item.get("waited"))
+            gap = item.get("gap_after")
+            wait_note = (
+                "提问之后有停顿，给学员留出了回答时间"
+                if waited
+                else "提问之后几乎没有停顿，更像自己问自己答"
+            )
+            if gap is not None and gap != "":
+                wait_note += f"（间隔 {gap} 秒）"
+            head = f"- [{clock}] {quote}" if clock else f"- {quote}"
+            ending = "" if quote.endswith(("。", "？", "!", "！", "?", "…")) else "。"
+            lines.append(f"{head}{ending} {wait_note}。")
+        lines.append("")
+    else:
+        lines.append("本段稿上没有列出具体提问。")
+        lines.append("")
+    empty = questions.get("empty") if isinstance(questions, dict) else []
+    empty_freq = str((questions or {}).get("empty_frequency") or "").strip()
+    lines.append(f"### 空问（{empty_freq or '0 次'}）")
+    lines.append("")
+    if isinstance(empty, list) and empty:
+        for item in empty:
+            if not isinstance(item, dict):
+                continue
+            quote = str(item.get("quote") or "").strip()
+            clock = str(item.get("clock") or "").strip()
+            if not quote:
+                continue
+            head = f"- [{clock}] {quote}" if clock else f"- {quote}"
+            lines.append(head)
+        lines.append("")
+    else:
+        lines.append("本段稿上没有列出空问。")
+        lines.append("")
     concepts = payload.get("concepts") if isinstance(payload.get("concepts"), list) else []
     lines.extend(["## 概念与示例", ""])
     if concepts:
@@ -355,26 +540,19 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     else:
         lines.append("- （无单独条目。）")
         lines.append("")
-    suspects = payload.get("asr_suspects") if isinstance(payload.get("asr_suspects"), list) else []
-    lines.extend(["## 疑似 ASR", ""])
-    if suspects:
-        for item in suspects:
-            if not isinstance(item, dict):
-                continue
-            heard = str(item.get("heard") or "").strip()
-            likely = str(item.get("likely") or "").strip()
-            clock = str(item.get("clock") or "").strip()
-            piece = heard
-            if likely:
-                piece += f" → {likely}"
-            if clock:
-                piece += f"（[{clock}]）"
-            lines.append(f"- {piece}。稿上原词保留；不要当成老师合格线问题。")
-        lines.append("")
-    else:
-        lines.append("- （模型未标出。）")
-        lines.append("")
     return "\n".join(lines)
+
+
+def _wait_seconds_label(wait: Any) -> str:
+    if wait is None or wait == "":
+        return "2"
+    try:
+        value = float(wait)
+    except (TypeError, ValueError):
+        return str(wait)
+    if value.is_integer():
+        return str(int(value))
+    return str(wait)
 
 
 def write_review(
@@ -385,6 +563,7 @@ def write_review(
     *,
     source_name: str,
     confirm_json_path: Path | None = None,
+    wait_seconds: float | None = None,
     complete: JsonComplete | None = None,
 ) -> ReviewResult:
     try:
@@ -408,6 +587,7 @@ def write_review(
             confirm = loaded
 
     segments = list(punct.get("segments") or [])
+    threshold = wait_seconds_threshold(wait_seconds)
     system, prompt_version = load_review_prompt()
     user = json.dumps(
         _build_user_payload(
@@ -415,6 +595,7 @@ def write_review(
             type_payload=type_payload,
             segments=segments,
             confirm=confirm,
+            wait_seconds=threshold,
         ),
         ensure_ascii=False,
         indent=2,
@@ -440,8 +621,12 @@ def write_review(
         "ruler": str(raw.get("ruler") or type_payload.get("ruler") or "").strip(),
         "duration": format_clock(duration_seconds(segments)),
         "delivery": without_blackboard(str(raw.get("delivery") or type_payload.get("delivery") or "").strip()),
-        "coverage": without_blackboard(str(raw.get("coverage") or "").strip()),
-        "summary": without_blackboard(str(raw.get("summary") or "").strip()),
+        "coverage": rewrite_coverage(
+            lesson_type=lesson_type,
+            opening=_slim_confirm(confirm)["opening"],
+            model_coverage=str(raw.get("coverage") or "").strip(),
+        ),
+        "summary": strip_internal_jargon(str(raw.get("summary") or "").strip()),
         "structure": {
             "modules": normalize_modules(structure_raw.get("modules") if isinstance(structure_raw, dict) else []),
             "why": without_blackboard(str(structure_raw.get("why") or "").strip()) if isinstance(structure_raw, dict) else "",
@@ -455,9 +640,9 @@ def write_review(
         },
         "must_fix": keep_cited(raw.get("must_fix")),
         "nice_to_have": normalize_notes(raw.get("nice_to_have"), note_key="suggestion"),
-        "playback": _string_list(raw.get("playback")),
         "concepts": normalize_notes(raw.get("concepts"), note_key="note"),
-        "asr_suspects": normalize_asr_suspects(raw.get("asr_suspects")) or _asr_from_confirm(confirm),
+        "questions": build_questions_payload(segments, raw, threshold=threshold),
+        "conduct": normalize_conduct(raw.get("conduct")),
         "model": model,
         "prompt_files": list(PROMPT_FILES),
         "prompt_version": prompt_version,

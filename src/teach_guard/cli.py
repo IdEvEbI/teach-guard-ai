@@ -172,6 +172,13 @@ def inspect(
             help="确认步骤不逐条提问，按草稿自动接受（测试与非交互使用）。",
         ),
     ] = False,
+    wait_seconds: Annotated[
+        float | None,
+        typer.Option(
+            "--wait-seconds",
+            help="具体提问后间隔达到该秒数记为留白，默认 2，也可用环境变量 WAIT_SECONDS。",
+        ),
+    ] = None,
 ) -> None:
     """为单个视频抽轨、转写、截图、识别画面词，确认后再写出建议报告。"""
     override: str | None = None
@@ -436,6 +443,7 @@ def inspect(
             stem,
             source_name=resolved.name,
             confirm_json_path=confirmed.json_path,
+            wait_seconds=wait_seconds,
         )
     except LlmConfigError as exc:
         mark_step(run_dir, "review", "failed", error=str(exc))

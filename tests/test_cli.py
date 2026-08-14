@@ -31,6 +31,7 @@ def test_inspect_help() -> None:
     assert "--type" in result.stdout
     assert "--punctuate" in result.stdout
     assert "--yes" in result.stdout
+    assert "--wait-seconds" in result.stdout
     assert "sf=stage_first" in result.stdout
 
 

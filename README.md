@@ -61,7 +61,7 @@ uv run teach-guard inspect --help
 uv run teach-guard inspect <视频或音频文件>
 ```
 
-课例默认放在 `data/input/`。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录，写入 `manifest.json`、音轨、`{stem}.raw.md`、`snapshot/`、画面词表、确认记录、确认逐字稿、课型与建议报告。默认跳过标点（`--punctuate` 可打开）。已有产物会跳过对应步骤。`--type` 可用短名（见 `--help`）。确认步骤可用 `--yes` 跳过提问。`scan` 尚未实现。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
+课例默认放在 `data/input/`。`inspect` 会在 `data/output/` 下按输入的相对路径建运行目录，写入 `manifest.json`、音轨、`{stem}.raw.md`、`snapshot/`、画面词表、确认记录、确认逐字稿、课型与建议报告。默认跳过标点（`--punctuate` 可打开）。已有产物会跳过对应步骤。`--type` 可用短名（见 `--help`）。确认步骤可用 `--yes` 跳过提问。提问留白下限默认 2 秒（`--wait-seconds` 或 `WAIT_SECONDS`）。所有课型的精查报告都会检查低俗用语、贬低或侮辱学员、贬低学科或课程、贬低前面授课老师。`scan` 尚未实现。密钥放在 `.env`（从 `.env.example` 复制），不要提交。
 
 ---
 
