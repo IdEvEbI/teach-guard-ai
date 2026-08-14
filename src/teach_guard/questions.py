@@ -16,16 +16,12 @@ EMPTY_MARKERS = (
     "明白了吗",
     "清楚了吗",
     "懂了吗",
-    "能跟上吗",
+    "能跟上",
     "跟上了吗",
+    "跟上我思路",
     "有没有问题",
-    "是还不是",
-    "对不对",
-    "好不好",
-    "是不是",
-    "对吧",
-    "是吧",
-    "对吗",
+    "有问题吗",
+    "可以了吗",
 )
 
 
@@ -194,18 +190,46 @@ def build_questions_payload(
         segments,
         threshold=threshold,
     )
+    rhetorical = normalize_specific_questions(
+        model_block.get("rhetorical") if isinstance(model_block, dict) else [],
+        segments,
+        threshold=threshold,
+    )
+    asked: list[dict[str, Any]] = []
+    set_ask: list[dict[str, Any]] = []
+    rhetorical_quotes = {(item.get("clock"), item.get("quote")) for item in rhetorical}
+    for item in specific:
+        key = (item.get("clock"), item.get("quote"))
+        if key in rhetorical_quotes or not item.get("waited"):
+            set_ask.append(item)
+        else:
+            asked.append(item)
+    for item in rhetorical:
+        key = (item.get("clock"), item.get("quote"))
+        if key not in {(row.get("clock"), row.get("quote")) for row in set_ask}:
+            set_ask.append(item)
     empty = merge_empty_questions(
         harvest_empty_questions(segments),
-        list(model_block.get("empty") or []) if isinstance(model_block, dict) else [],
+        [
+            item
+            for item in (list(model_block.get("empty") or []) if isinstance(model_block, dict) else [])
+            if isinstance(item, dict) and _looks_like_empty_question(str(item.get("quote") or item.get("text") or ""))
+        ],
         segments,
         threshold=threshold,
     )
     return {
         "wait_seconds": threshold,
-        "specific": specific,
+        "specific": asked,
+        "rhetorical": set_ask,
         "empty": empty,
-        "specific_count": len(specific),
+        "specific_count": len(asked),
+        "rhetorical_count": len(set_ask),
         "empty_count": len(empty),
         "empty_frequency": frequency_label(len(empty), duration),
         "duration": format_clock(duration),
     }
+
+
+def _looks_like_empty_question(text: str) -> bool:
+    return any(marker in text for marker in EMPTY_MARKERS)

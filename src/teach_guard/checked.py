@@ -11,7 +11,6 @@ from typing import Any
 from teach_guard.transcribe import format_clock
 
 EXIT_CHECKED_FAILED = 14
-CLOCK_WINDOW_SECONDS = 90.0
 
 
 class CheckedError(RuntimeError):
@@ -23,13 +22,6 @@ class CheckedResult:
     json_path: Path
     markdown_path: Path
     applied_count: int
-
-
-def parse_clock_seconds(clock: str) -> float | None:
-    parts = str(clock or "").strip().split(":")
-    if len(parts) != 3 or not all(part.isdigit() for part in parts):
-        return None
-    return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
 
 
 def replace_heard(text: str, heard: str, canonical: str) -> tuple[str, int]:
@@ -44,8 +36,6 @@ def replace_heard(text: str, heard: str, canonical: str) -> tuple[str, int]:
 def apply_confirmed_terms(
     segments: list[dict[str, Any]],
     terms: list[dict[str, Any]],
-    *,
-    window: float = CLOCK_WINDOW_SECONDS,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     copied: list[dict[str, Any]] = [dict(item) for item in segments]
     applied: list[dict[str, Any]] = []
@@ -60,27 +50,13 @@ def apply_confirmed_terms(
         if not heard or not canonical or heard == canonical:
             continue
         clock = str(item.get("clock") or "").strip()
-        center = parse_clock_seconds(clock)
         total = 0
-
-        def run(indices: list[int]) -> int:
-            count = 0
-            for index in indices:
-                text = str(copied[index].get("text") or "")
-                new_text, n = replace_heard(text, heard, canonical)
-                if n:
-                    copied[index]["text"] = new_text
-                    count += n
-            return count
-
-        nearby = [
-            index
-            for index, segment in enumerate(copied)
-            if center is None or abs(float(segment.get("start") or 0) - center) <= window
-        ]
-        total = run(nearby)
-        if total == 0:
-            total = run(list(range(len(copied))))
+        for index, segment in enumerate(copied):
+            text = str(segment.get("text") or "")
+            new_text, count = replace_heard(text, heard, canonical)
+            if count:
+                copied[index]["text"] = new_text
+                total += count
         applied.append(
             {
                 "clock": clock,

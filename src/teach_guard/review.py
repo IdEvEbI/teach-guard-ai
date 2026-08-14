@@ -106,6 +106,24 @@ CONDUCT_CATEGORIES = (
     ("disparage_teacher", "贬低前面授课老师"),
 )
 
+FORCE_LABELS = {
+    "design": "设计",
+    "communication": "沟通",
+    "expression": "表达",
+}
+
+LEARN_WHAT_LAYERS = (
+    ("chain", "培养链与就业关系"),
+    ("outcome", "阶段末成果"),
+    ("days", "各天预期"),
+)
+
+LEARN_WHAT_STATUS = {
+    "covered": "已覆盖",
+    "partial": "只讲到一部分",
+    "missing": "当天没有",
+}
+
 OPENING_LABELS = {
     "self_intro": "自我介绍",
     "class_norms": "班级约定",
@@ -218,9 +236,51 @@ def keep_cited(items: Any, *, fix_key: str = "fix") -> list[dict[str, str]]:
                 "clock": clock,
                 "quote": quote,
                 "fix": without_blackboard(str(item.get(fix_key) or item.get("suggestion") or "").strip()),
+                "force": _normalize_force(str(item.get("force") or item.get("dimension") or "")),
             }
         )
     return kept
+
+
+def _normalize_force(raw: str) -> str:
+    text = raw.strip().lower()
+    aliases = {
+        "design": "design",
+        "设计": "design",
+        "设计力": "design",
+        "communication": "communication",
+        "沟通": "communication",
+        "沟通力": "communication",
+        "expression": "expression",
+        "表达": "expression",
+        "表达力": "expression",
+    }
+    return aliases.get(text, aliases.get(raw.strip(), ""))
+
+
+def normalize_learn_what(items: Any) -> list[dict[str, str]]:
+    by_layer: dict[str, dict[str, str]] = {}
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            layer = str(item.get("layer") or "").strip()
+            if layer not in {key for key, _label in LEARN_WHAT_LAYERS}:
+                continue
+            status = str(item.get("status") or "").strip()
+            if status not in LEARN_WHAT_STATUS:
+                status = "partial" if str(item.get("note") or "").strip() else ""
+            by_layer[layer] = {
+                "layer": layer,
+                "status": status,
+                "note": without_blackboard(str(item.get("note") or "").strip()),
+                "clock": str(item.get("clock") or "").strip(),
+                "quote": str(item.get("quote") or "").strip(),
+            }
+    return [
+        by_layer.get(key) or {"layer": key, "status": "", "note": "", "clock": "", "quote": ""}
+        for key, _label in LEARN_WHAT_LAYERS
+    ]
 
 
 def keep_cited_quotes(items: Any, *, title: str) -> list[dict[str, str]]:
@@ -394,19 +454,36 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     note = str(structure.get("structure_note") or "").strip() if isinstance(structure, dict) else ""
     if note:
         lines.extend(["", note])
+    learn_what = structure.get("learn_what") if isinstance(structure, dict) else []
+    if isinstance(learn_what, list) and any(isinstance(item, dict) and str(item.get("note") or item.get("status") or "").strip() for item in learn_what):
+        lines.extend(["", "**「学什么」三层**", ""])
+        for index, (key, label) in enumerate(LEARN_WHAT_LAYERS, start=1):
+            row = next((item for item in learn_what if isinstance(item, dict) and item.get("layer") == key), {})
+            status = LEARN_WHAT_STATUS.get(str(row.get("status") or ""), "")
+            detail = str(row.get("note") or "").strip()
+            clock = str(row.get("clock") or "").strip()
+            quote = str(row.get("quote") or "").strip()
+            bits = [part for part in (status, detail) if part]
+            line = f"{index}. {label}：{'；'.join(bits) if bits else '（未写。）'}"
+            if clock and quote:
+                line += f" 摘句：[{clock}] {quote}"
+            lines.append(line)
+        lines.append("")
     lines.extend(["", "## 合格线（必须改）", ""])
     must_fix = payload.get("must_fix") if isinstance(payload.get("must_fix"), list) else []
     if must_fix:
-        for item in must_fix:
+        for index, item in enumerate(must_fix, start=1):
             if not isinstance(item, dict):
                 continue
-            lines.append(f"### {item.get('item')}")
-            lines.append("")
-            lines.append(f"- 摘句：[{item.get('clock')}] {item.get('quote')}")
+            force = FORCE_LABELS.get(str(item.get("force") or ""), "")
+            title = str(item.get("item") or "").strip()
+            head = f"（{force}）{title}" if force else title
+            lines.append(f"{index}. **{head}**")
+            lines.append(f"   - 摘句：[{item.get('clock')}] {item.get('quote')}")
             fix = str(item.get("fix") or "").strip()
             if fix:
-                lines.append(f"- 改法：{fix}")
-            lines.append("")
+                lines.append(f"   - 改法：{fix}")
+        lines.append("")
     else:
         lines.append("本段稿上没有足以写成必须改的摘句。")
         lines.append("")
@@ -439,7 +516,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     )
     lines.append("")
     conduct = payload.get("conduct") if isinstance(payload.get("conduct"), dict) else {}
-    for key, label in CONDUCT_CATEGORIES:
+    for index, (key, label) in enumerate(CONDUCT_CATEGORIES, start=1):
         raw_items = conduct.get(key) if isinstance(conduct, dict) else []
         items = raw_items if isinstance(raw_items, list) else []
         cited = [
@@ -447,18 +524,16 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
             for item in items
             if isinstance(item, dict) and str(item.get("clock") or "").strip() and str(item.get("quote") or "").strip()
         ]
-        lines.append(f"### {label}")
-        lines.append("")
-        if cited:
-            for item in cited:
-                lines.append(f"- 摘句：[{item.get('clock')}] {item.get('quote')}")
-                fix = str(item.get("fix") or "").strip()
-                if fix:
-                    lines.append(f"  改法：{fix}")
-            lines.append("")
-        else:
-            lines.append("本段逐字稿上未发现这类话术。")
-            lines.append("")
+        if not cited:
+            lines.append(f"{index}. {label}：本段逐字稿上未发现这类话术。")
+            continue
+        lines.append(f"{index}. {label}：")
+        for item in cited:
+            lines.append(f"   - 摘句：[{item.get('clock')}] {item.get('quote')}")
+            fix = str(item.get("fix") or "").strip()
+            if fix:
+                lines.append(f"     改法：{fix}")
+    lines.append("")
     questions = payload.get("questions") if isinstance(payload.get("questions"), dict) else {}
     lines.extend(["## 提问与留白", ""])
     wait = questions.get("wait_seconds") if isinstance(questions, dict) else None
@@ -466,12 +541,32 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     wait_label = _wait_seconds_label(wait)
     lines.append(
         f"本段时长 {duration or '（未知）'}。"
-        "下面只列出老师发出的提问，方便对照录像。"
-        f"提问之后停顿达到 {wait_label} 秒，记为给学员留出了回答时间。"
+        "下面分开列出设问、具体提问和空问，方便对照录像。"
+        "设问是老师自问自答、用来带方向，不算必须改。"
+        f"具体提问之后停顿达到 {wait_label} 秒，记为给学员留出了回答时间。"
         "在共屏上写字、画图造成的停顿不算。"
         "录音里通常听不清学员回答，因此不判断课堂上有没有形成问答。"
     )
     lines.append("")
+    rhetorical = questions.get("rhetorical") if isinstance(questions, dict) else []
+    rhetorical_count = questions.get("rhetorical_count") if isinstance(questions, dict) else None
+    lines.append(f"### 设问（{rhetorical_count if rhetorical_count is not None else len(rhetorical or [])} 次）")
+    lines.append("")
+    if isinstance(rhetorical, list) and rhetorical:
+        for item in rhetorical:
+            if not isinstance(item, dict):
+                continue
+            quote = str(item.get("quote") or "").strip()
+            clock = str(item.get("clock") or "").strip()
+            if not quote:
+                continue
+            head = f"- [{clock}] {quote}" if clock else f"- {quote}"
+            ending = "" if quote.endswith(("。", "？", "!", "！", "?", "…")) else "。"
+            lines.append(f"{head}{ending} 这是设问，用来带方向；老师接着自己讲了下去。")
+        lines.append("")
+    else:
+        lines.append("本段稿上没有列出设问。")
+        lines.append("")
     specific = questions.get("specific") if isinstance(questions, dict) else []
     specific_count = questions.get("specific_count") if isinstance(questions, dict) else None
     lines.append(f"### 具体提问（{specific_count if specific_count is not None else len(specific or [])} 次）")
@@ -489,7 +584,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
             wait_note = (
                 "提问之后有停顿，给学员留出了回答时间"
                 if waited
-                else "提问之后几乎没有停顿，更像自己问自己答"
+                else "提问之后几乎没有停顿"
             )
             if gap is not None and gap != "":
                 wait_note += f"（间隔 {gap} 秒）"
@@ -636,6 +731,9 @@ def write_review(
                 without_blackboard(str(structure_raw.get("structure_note") or "").strip())
                 if isinstance(structure_raw, dict)
                 else ""
+            ),
+            "learn_what": normalize_learn_what(
+                structure_raw.get("learn_what") if isinstance(structure_raw, dict) else []
             ),
         },
         "must_fix": keep_cited(raw.get("must_fix")),

@@ -16,8 +16,10 @@ from teach_guard.transcribe import format_clock
 
 PROMPT_FILE = "confirm.md"
 EXIT_CONFIRM_FAILED = 13
+OFFSCREEN_TERM_LIMIT = 5
 
 AskFn = Callable[[str], str]
+NotifyFn = Callable[[str], None]
 JsonComplete = Callable[..., dict[str, Any]]
 
 OPENING_FIELDS = (
@@ -92,11 +94,19 @@ def load_confirm_if_present(run_dir: Path, stem: str) -> ConfirmResult | None:
     )
 
 
+def _confirm_mode_label(payload: dict[str, Any]) -> str:
+    if payload.get("auto"):
+        return "非交互（--yes）"
+    if payload.get("accept_screen"):
+        return "CLI 确认（画面用词已自动采用）"
+    return "CLI 逐条确认"
+
+
 def render_confirm_markdown(payload: dict[str, Any]) -> str:
     lines = [
         "# 确认记录",
         "",
-        f"- 方式：{'非交互（--yes）' if payload.get('auto') else 'CLI 逐条确认'}",
+        f"- 方式：{_confirm_mode_label(payload)}",
         f"- 模型：`{payload.get('model') or ''}`",
         "",
         "## 专名",
@@ -169,27 +179,41 @@ def draft_confirm(
         raise ConfirmError(detail if "失败" in detail else f"确认草稿失败：{detail}") from exc
     if not isinstance(raw, dict):
         raise ConfirmError("确认草稿失败：模型返回不是 JSON 对象。")
+    terms = normalize_confirm_terms(raw.get("terms") or [])
+    opening_needed = [str(item).strip() for item in (raw.get("opening_needed") or []) if str(item).strip()]
+    return {"terms": terms, "opening_needed": opening_needed, "prompt_version": prompt_version}
+
+
+def normalize_confirm_terms(items: object) -> list[dict[str, str]]:
     terms: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for item in raw.get("terms") or []:
+    seen: set[tuple[str, str]] = set()
+    offscreen = 0
+    if not isinstance(items, list):
+        return terms
+    for item in items:
         if not isinstance(item, dict):
             continue
         heard = str(item.get("heard") or "").strip()
         if not heard:
             continue
-        term = {
-            "clock": str(item.get("clock") or "").strip(),
-            "heard": heard,
-            "screen": str(item.get("screen") or "").strip(),
-            "snapshot": str(item.get("snapshot") or "").strip(),
-        }
-        key = (term["clock"], term["heard"], term["screen"])
+        screen = str(item.get("screen") or "").strip()
+        key = (heard, screen)
         if key in seen:
             continue
+        if not screen:
+            if offscreen >= OFFSCREEN_TERM_LIMIT:
+                continue
+            offscreen += 1
         seen.add(key)
-        terms.append(term)
-    opening_needed = [str(item).strip() for item in (raw.get("opening_needed") or []) if str(item).strip()]
-    return {"terms": terms, "opening_needed": opening_needed, "prompt_version": prompt_version}
+        terms.append(
+            {
+                "clock": str(item.get("clock") or "").strip(),
+                "heard": heard,
+                "screen": screen,
+                "snapshot": str(item.get("snapshot") or "").strip(),
+            }
+        )
+    return terms
 
 
 def _ask_term(item: dict[str, str], ask: AskFn) -> dict[str, str]:
@@ -225,27 +249,46 @@ def _ask_opening(field_key: str, label: str, ask: AskFn) -> str:
         prompt = "请输入 1、2 或 3："
 
 
+def _accept_screen_term(item: dict[str, str], notify: NotifyFn | None) -> dict[str, str]:
+    screen = str(item.get("screen") or "").strip()
+    heard = str(item.get("heard") or "").strip()
+    clock = str(item.get("clock") or "")
+    if notify is not None:
+        notify(f"已采用画面用词：[{clock or '？'}] 「{heard}」→「{screen}」")
+    return {
+        "clock": clock,
+        "heard": heard,
+        "canonical": screen,
+        "source": "screen",
+    }
+
+
 def apply_confirm_answers(
     draft: dict[str, Any],
     *,
     lesson_type: str,
     auto: bool,
     ask: AskFn | None = None,
+    accept_screen: bool = False,
+    notify: NotifyFn | None = None,
 ) -> dict[str, Any]:
     terms: list[dict[str, str]] = []
     for item in draft.get("terms") or []:
         if not isinstance(item, dict):
             continue
+        screen = str(item.get("screen") or "").strip()
         if auto or ask is None:
-            canonical = str(item.get("screen") or item.get("heard") or "").strip()
+            canonical = screen or str(item.get("heard") or "").strip()
             terms.append(
                 {
                     "clock": str(item.get("clock") or ""),
                     "heard": str(item.get("heard") or ""),
                     "canonical": canonical,
-                    "source": "screen" if item.get("screen") else "auto",
+                    "source": "screen" if screen else "auto",
                 }
             )
+        elif accept_screen and screen:
+            terms.append(_accept_screen_term(item, notify))
         else:
             terms.append(_ask_term(item, ask))
 
@@ -272,6 +315,8 @@ def write_confirm(
     screen: dict[str, Any] | None,
     auto: bool,
     ask: AskFn | None = None,
+    accept_screen: bool = False,
+    notify: NotifyFn | None = None,
     complete: JsonComplete | None = None,
 ) -> ConfirmResult:
     draft = draft_confirm(
@@ -281,9 +326,17 @@ def write_confirm(
         screen=screen,
         complete=complete,
     )
-    answers = apply_confirm_answers(draft, lesson_type=lesson_type, auto=auto, ask=ask)
+    answers = apply_confirm_answers(
+        draft,
+        lesson_type=lesson_type,
+        auto=auto,
+        ask=ask,
+        accept_screen=accept_screen,
+        notify=notify,
+    )
     payload = {
         "auto": auto,
+        "accept_screen": bool(accept_screen) and not auto,
         "lesson_type": lesson_type,
         "filename": source_name,
         "terms": answers["terms"],

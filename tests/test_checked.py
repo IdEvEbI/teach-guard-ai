@@ -14,6 +14,22 @@ def test_replace_heard_ascii_word_boundary() -> None:
     assert text == "KNN 与 KNN 分类"
 
 
+def test_apply_confirmed_terms_replaces_same_heard_everywhere() -> None:
+    segments = [
+        {"start": 0.0, "end": 2.0, "text": "开场"},
+        {"start": 550.0, "end": 554.0, "text": "KN 分类"},
+        {"start": 910.0, "end": 914.0, "text": "KN 再出现"},
+    ]
+    copied, applied = apply_confirmed_terms(
+        segments,
+        [{"clock": "00:09:10", "heard": "KN", "canonical": "KNN"}],
+    )
+    assert copied[1]["text"] == "KNN 分类"
+    assert copied[2]["text"] == "KNN 再出现"
+    assert copied[0]["text"] == "开场"
+    assert applied[0]["replacements"] == 2
+
+
 def test_apply_confirmed_terms_near_clock() -> None:
     segments = [
         {"start": 0.0, "end": 2.0, "text": "开场"},

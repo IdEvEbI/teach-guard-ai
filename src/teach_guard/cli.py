@@ -172,6 +172,13 @@ def inspect(
             help="确认步骤不逐条提问，按草稿自动接受（测试与非交互使用）。",
         ),
     ] = False,
+    accept_screen: Annotated[
+        bool,
+        typer.Option(
+            "--accept-screen/--ask-screen",
+            help="默认采用画面用词；--ask-screen 则逐条核对。无画面专名与开场三项仍提问。",
+        ),
+    ] = True,
     wait_seconds: Annotated[
         float | None,
         typer.Option(
@@ -394,7 +401,12 @@ def inspect(
         mark_step(run_dir, "confirm", "skipped")
         typer.echo(f"已有确认记录，跳过提问：{confirmed.markdown_path}")
     else:
-        typer.echo("正在准备确认项…" if yes else "请逐条确认（稿上用词与开场三项）…")
+        if yes:
+            typer.echo("正在准备确认项…")
+        elif accept_screen:
+            typer.echo("画面已有对应词的条目将自动采用；其余项请确认…")
+        else:
+            typer.echo("请逐条确认（稿上用词与开场三项）…")
         try:
             segments = json.loads(transcript.json_path.read_text(encoding="utf-8")).get("segments") or []
             screen_payload = json.loads(screen.json_path.read_text(encoding="utf-8"))
@@ -407,6 +419,8 @@ def inspect(
                 screen=screen_payload if isinstance(screen_payload, dict) else None,
                 auto=yes,
                 ask=None if yes else _ask_line,
+                accept_screen=accept_screen and not yes,
+                notify=typer.echo,
             )
         except LlmConfigError as exc:
             mark_step(run_dir, "confirm", "failed", error=str(exc))
