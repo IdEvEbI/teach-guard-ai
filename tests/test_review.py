@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from teach_guard.review import (
+    STAGE_FIRST_REFERENCE_TABLE,
     compact_transcript,
     keep_cited,
     normalize_conduct,
@@ -185,11 +186,23 @@ def test_render_report_splits_must_and_nice() -> None:
             "prompt_version": "v0.1",
         }
     )
-    assert "## 合格线（必须改）" in markdown
+    assert "## 一、结论摘要" in markdown
+    assert "### 1.1 现场结构" in markdown
+    assert "#### 「学什么」三层" in markdown
+    assert "### 1.2 参考结构和要点" in markdown
+    assert STAGE_FIRST_REFERENCE_TABLE.strip() in markdown
+    assert "自我介绍" in markdown
+    assert "班级约定" in markdown
+    assert "今日目标" in markdown
+    assert "## 二、建议和参考" in markdown
+    assert "### 2.1 合格线（必须改）" in markdown
     assert "（设计）阶段末成果只停留在口头" in markdown
     assert "### 阶段末成果只停留在口头" not in markdown
-    assert "## 水平线（参考调整）" in markdown
-    assert "提问与留白" in markdown
+    assert "### 2.2 水平线（参考调整）" in markdown
+    assert "## 三、沟通表达" in markdown
+    assert "### 3.1 表达力：概念和示例的准确性" in markdown
+    assert "### 3.2 沟通力：提问与互动" in markdown
+    assert "### 3.3 言行底线检测" in markdown
     assert "对照录像" in markdown
     assert "不判断课堂上有没有形成问答" in markdown
     assert "接住" not in markdown
@@ -199,7 +212,6 @@ def test_render_report_splits_must_and_nice() -> None:
     assert "疑似 ASR" not in markdown
     assert "只覆盖「学什么」" in markdown
     assert "板书" not in markdown
-    assert "言行底线" in markdown
     assert "1. 低俗用语：" in markdown
     assert "### 低俗用语" not in markdown
     assert "这破课有什么用" in markdown
@@ -207,8 +219,35 @@ def test_render_report_splits_must_and_nice() -> None:
     assert "贬低或侮辱学员" in markdown
     assert "贬低前面授课老师" in markdown
     assert markdown.count("本段逐字稿上未发现这类话术") == 3
-    assert "「学什么」三层" in markdown
     assert "培养链与就业关系" in markdown
+    assert markdown.index("### 3.1") < markdown.index("### 3.2") < markdown.index("### 3.3")
+
+
+def test_render_report_omits_stage_first_table_for_other_types() -> None:
+    markdown = render_report_markdown(
+        {
+            "lesson_type": "practice",
+            "ruler": "006",
+            "duration": "00:18:00",
+            "delivery": "按路径做出可用结果。",
+            "coverage": "演示加随堂。",
+            "summary": "本段是实操。",
+            "structure": {"modules": [], "why": "", "what": "", "how": ""},
+            "must_fix": [],
+            "nice_to_have": [],
+            "concepts": [],
+            "questions": {"rhetorical": [], "specific": [], "empty": []},
+            "conduct": {},
+            "model": "stub",
+            "prompt_version": "v0.1",
+        }
+    )
+    assert "## 一、结论摘要" in markdown
+    assert "### 1.1 现场结构" in markdown
+    assert "### 1.2 参考结构和要点" not in markdown
+    assert "15～20 分钟" not in markdown
+    assert "### 2.1 合格线（必须改）" in markdown
+    assert "### 3.2 沟通力：提问与互动" in markdown
 
 
 def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
@@ -325,10 +364,11 @@ def test_write_review_drops_uncited_must_fix(tmp_path: Path) -> None:
     assert "编造的缺口" not in markdown
     assert "待回放确认" not in markdown
     assert "未出现自我介绍" not in markdown
-    assert "提问与留白" in markdown
+    assert "提问与互动" in markdown
     assert "了解即可吗" in markdown
     assert "只覆盖「学什么」" in markdown
-    assert "言行底线" in markdown
+    assert "言行底线检测" in markdown
+    assert "### 1.2 参考结构和要点" in markdown
     assert "这课就是骗钱的" in markdown
     assert "3. 贬低学科或课程：" in markdown
     assert "### 贬低学科或课程" not in markdown

@@ -1,4 +1,4 @@
-"""单视频精查报告：现场结构、概念观察、合格线 / 水平线、言行底线、提问与留白。不打分。"""
+"""单视频精查报告：结论摘要、建议和参考、沟通表达。不打分。"""
 
 from __future__ import annotations
 
@@ -118,6 +118,15 @@ LEARN_WHAT_LAYERS = (
     ("outcome", "阶段末成果"),
     ("days", "各天预期"),
 )
+
+STAGE_FIRST_REFERENCE_TABLE = """\
+| 顺序 | 部分     | 参考时长    | 要达成的效果                                       |
+| ---- | -------- | ----------- | -------------------------------------------------- |
+| 1    | 学什么   | 15～20 分钟 | 理解本阶段为什么重要，看见阶段末成果，对各天有预期 |
+| 2    | 自我介绍 | 约 10 分钟  | 以学员为中心，讲清「能给大家带来什么」             |
+| 3    | 班级约定 | 约 5 分钟   | 听课、练习、作业、反馈四条底线                     |
+| 4    | 今日目标 | 约 5 分钟   | 今天学什么技术、今天做出什么结果，然后进正课       |
+"""
 
 LEARN_WHAT_STATUS = {
     "covered": "已覆盖",
@@ -421,11 +430,11 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
         f"- 模型：`{payload.get('model') or ''}`",
         f"- 提示词：{payload.get('prompt_version') or ''}",
         "",
-        "## 结论摘要",
+        "## 一、结论摘要",
         "",
         str(payload.get("summary") or "（未写摘要。）").strip(),
         "",
-        "## 现场结构",
+        "### 1.1 现场结构",
         "",
     ]
     structure = payload.get("structure") if isinstance(payload.get("structure"), dict) else {}
@@ -457,7 +466,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
         lines.extend(["", note])
     learn_what = structure.get("learn_what") if isinstance(structure, dict) else []
     if isinstance(learn_what, list) and any(isinstance(item, dict) and str(item.get("note") or item.get("status") or "").strip() for item in learn_what):
-        lines.extend(["", "**「学什么」三层**", ""])
+        lines.extend(["", "#### 「学什么」三层", ""])
         for index, (key, label) in enumerate(LEARN_WHAT_LAYERS, start=1):
             row = next((item for item in learn_what if isinstance(item, dict) and item.get("layer") == key), {})
             status = LEARN_WHAT_STATUS.get(str(row.get("status") or ""), "")
@@ -470,7 +479,13 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
                 line += f" 摘句：[{clock}] {quote}"
             lines.append(line)
         lines.append("")
-    lines.extend(["", "## 合格线（必须改）", ""])
+    if lesson_type == "stage_first":
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(["### 1.2 参考结构和要点", "", STAGE_FIRST_REFERENCE_TABLE.rstrip(), ""])
+    if lines and lines[-1] != "":
+        lines.append("")
+    lines.extend(["## 二、建议和参考", "", "### 2.1 合格线（必须改）", ""])
     must_fix = payload.get("must_fix") if isinstance(payload.get("must_fix"), list) else []
     if must_fix:
         for index, item in enumerate(must_fix, start=1):
@@ -488,7 +503,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     else:
         lines.append("本段稿上没有足以写成必须改的摘句。")
         lines.append("")
-    lines.extend(["## 水平线（参考调整）", ""])
+    lines.extend(["### 2.2 水平线（参考调整）", ""])
     nice = payload.get("nice_to_have") if isinstance(payload.get("nice_to_have"), list) else []
     if nice:
         for item in nice:
@@ -510,33 +525,30 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     else:
         lines.append("- （无。）")
         lines.append("")
-    lines.extend(["## 言行底线", ""])
-    lines.append(
-        "所有课型都检查下面四类话术：低俗用语、贬低或侮辱学员、嫌弃本学科或本课程、嫌弃前面授课老师。"
-        "只依据逐字稿原句。没有摘句就不写成必须改。"
-    )
-    lines.append("")
-    conduct = payload.get("conduct") if isinstance(payload.get("conduct"), dict) else {}
-    for index, (key, label) in enumerate(CONDUCT_CATEGORIES, start=1):
-        raw_items = conduct.get(key) if isinstance(conduct, dict) else []
-        items = raw_items if isinstance(raw_items, list) else []
-        cited = [
-            item
-            for item in items
-            if isinstance(item, dict) and str(item.get("clock") or "").strip() and str(item.get("quote") or "").strip()
-        ]
-        if not cited:
-            lines.append(f"{index}. {label}：本段逐字稿上未发现这类话术。")
-            continue
-        lines.append(f"{index}. {label}：")
-        for item in cited:
-            lines.append(f"   - 摘句：[{item.get('clock')}] {item.get('quote')}")
-            fix = str(item.get("fix") or "").strip()
-            if fix:
-                lines.append(f"     改法：{fix}")
-    lines.append("")
+    lines.extend(["## 三、沟通表达", "", "### 3.1 表达力：概念和示例的准确性", ""])
+    concepts = payload.get("concepts") if isinstance(payload.get("concepts"), list) else []
+    if concepts:
+        for item in concepts:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("item") or "").strip()
+            clock = str(item.get("clock") or "").strip()
+            quote = str(item.get("quote") or "").strip()
+            note = str(item.get("note") or "").strip()
+            head = f"- **{title}**"
+            if clock:
+                head += f"（[{clock}]）"
+            lines.append(head)
+            if quote:
+                lines.append(f"  - 摘句：{quote}")
+            if note:
+                lines.append(f"  - {note}")
+        lines.append("")
+    else:
+        lines.append("- （无单独条目。）")
+        lines.append("")
     questions = payload.get("questions") if isinstance(payload.get("questions"), dict) else {}
-    lines.extend(["## 提问与留白", ""])
+    lines.extend(["### 3.2 沟通力：提问与互动", ""])
     wait = questions.get("wait_seconds") if isinstance(questions, dict) else None
     duration = str((questions or {}).get("duration") or payload.get("duration") or "").strip()
     wait_label = _wait_seconds_label(wait)
@@ -551,7 +563,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     lines.append("")
     rhetorical = questions.get("rhetorical") if isinstance(questions, dict) else []
     rhetorical_count = questions.get("rhetorical_count") if isinstance(questions, dict) else None
-    lines.append(f"### 设问（{rhetorical_count if rhetorical_count is not None else len(rhetorical or [])} 次）")
+    lines.append(f"#### 设问（{rhetorical_count if rhetorical_count is not None else len(rhetorical or [])} 次）")
     lines.append("")
     if isinstance(rhetorical, list) and rhetorical:
         for item in rhetorical:
@@ -570,7 +582,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
         lines.append("")
     specific = questions.get("specific") if isinstance(questions, dict) else []
     specific_count = questions.get("specific_count") if isinstance(questions, dict) else None
-    lines.append(f"### 具体提问（{specific_count if specific_count is not None else len(specific or [])} 次）")
+    lines.append(f"#### 具体提问（{specific_count if specific_count is not None else len(specific or [])} 次）")
     lines.append("")
     if isinstance(specific, list) and specific:
         for item in specific:
@@ -598,7 +610,7 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
         lines.append("")
     empty = questions.get("empty") if isinstance(questions, dict) else []
     empty_freq = str((questions or {}).get("empty_frequency") or "").strip()
-    lines.append(f"### 空问（{empty_freq or '0 次'}）")
+    lines.append(f"#### 空问（{empty_freq or '0 次'}）")
     lines.append("")
     if isinstance(empty, list) and empty:
         for item in empty:
@@ -614,28 +626,31 @@ def render_report_markdown(payload: dict[str, Any]) -> str:
     else:
         lines.append("本段稿上没有列出空问。")
         lines.append("")
-    concepts = payload.get("concepts") if isinstance(payload.get("concepts"), list) else []
-    lines.extend(["## 概念与示例", ""])
-    if concepts:
-        for item in concepts:
-            if not isinstance(item, dict):
-                continue
-            title = str(item.get("item") or "").strip()
-            clock = str(item.get("clock") or "").strip()
-            quote = str(item.get("quote") or "").strip()
-            note = str(item.get("note") or "").strip()
-            head = f"- **{title}**"
-            if clock:
-                head += f"（[{clock}]）"
-            lines.append(head)
-            if quote:
-                lines.append(f"  - 摘句：{quote}")
-            if note:
-                lines.append(f"  - {note}")
-        lines.append("")
-    else:
-        lines.append("- （无单独条目。）")
-        lines.append("")
+    lines.extend(["### 3.3 言行底线检测", ""])
+    lines.append(
+        "所有课型都检查下面四类话术：低俗用语、贬低或侮辱学员、嫌弃本学科或本课程、嫌弃前面授课老师。"
+        "只依据逐字稿原句。没有摘句就不写成必须改。"
+    )
+    lines.append("")
+    conduct = payload.get("conduct") if isinstance(payload.get("conduct"), dict) else {}
+    for index, (key, label) in enumerate(CONDUCT_CATEGORIES, start=1):
+        raw_items = conduct.get(key) if isinstance(conduct, dict) else []
+        items = raw_items if isinstance(raw_items, list) else []
+        cited = [
+            item
+            for item in items
+            if isinstance(item, dict) and str(item.get("clock") or "").strip() and str(item.get("quote") or "").strip()
+        ]
+        if not cited:
+            lines.append(f"{index}. {label}：本段逐字稿上未发现这类话术。")
+            continue
+        lines.append(f"{index}. {label}：")
+        for item in cited:
+            lines.append(f"   - 摘句：[{item.get('clock')}] {item.get('quote')}")
+            fix = str(item.get("fix") or "").strip()
+            if fix:
+                lines.append(f"     改法：{fix}")
+    lines.append("")
     return "\n".join(lines)
 
 
